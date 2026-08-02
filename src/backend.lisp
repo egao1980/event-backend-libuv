@@ -24,6 +24,28 @@
   (when (and (pointerp ptr) (not (null-pointer-p ptr)))
     (foreign-free ptr)))
 
+;;; sb-ext:atomic-exchange is missing on some SBCL Windows builds (e.g. 2.4.11);
+;;; compare-and-swap is the portable SBCL primitive for cons-cell places.
+(defun %steal-wake-queue (loop)
+  "Atomically take and clear LOOP's wake-queue (newest-first)."
+  #+sbcl
+  (loop for old = (slot-value loop 'wake-queue)
+        when (eq (sb-ext:compare-and-swap (slot-value loop 'wake-queue) old nil) old)
+          return old)
+  #-sbcl
+  (shiftf (libuv-loop-wake-queue loop) nil))
+
+(defun %push-wake-queue (loop function)
+  "Atomically push FUNCTION onto LOOP's wake-queue."
+  #+sbcl
+  (loop for old = (slot-value loop 'wake-queue)
+        when (eq (sb-ext:compare-and-swap (slot-value loop 'wake-queue)
+                                          old (cons function old))
+                 old)
+          return function)
+  #-sbcl
+  (push function (libuv-loop-wake-queue loop)))
+
 (defun %abort-handle (ptr)
   (when (and (pointerp ptr) (not (null-pointer-p ptr)))
     (let ((entry (%lookup ptr)))
@@ -111,9 +133,7 @@
   (let ((entry (%lookup handle)))
     (when entry
       (let ((loop (getf (cdr entry) :loop)))
-        (dolist (fn (nreverse
-                      #+sbcl (sb-ext:atomic-exchange (slot-value loop 'wake-queue) nil)
-                      #-sbcl (shiftf (libuv-loop-wake-queue loop) nil)))
+        (dolist (fn (nreverse (%steal-wake-queue loop)))
           (handler-case (funcall fn)
             (error (e)
               (warn "wake callback error: ~A" e))))))))
@@ -249,8 +269,7 @@
 
 (defun wake-call (loop function)
   "Enqueue FUNCTION on LOOP and wake it (safe from other threads on SBCL)."
-  #+sbcl (sb-ext:atomic-push function (slot-value loop 'wake-queue))
-  #-sbcl (push function (libuv-loop-wake-queue loop))
+  (%push-wake-queue loop function)
   (wake (event-loop-backend loop) loop)
   loop)
 
