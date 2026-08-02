@@ -119,7 +119,7 @@ run_lisp() {
   elif command -v ros >/dev/null 2>&1; then
     ros -e "$load_form" -q
   else
-    sbcl --non-interactive --load "$STAGE_LISP"
+    sbcl --non-interactive --load "$LISP_STAGE"
   fi
 }
 
