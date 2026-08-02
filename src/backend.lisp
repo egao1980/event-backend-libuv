@@ -15,6 +15,20 @@
 (defun %lookup (ptr)
   (gethash (%addr ptr) *uv-callbacks*))
 
+(defun %assert-loop-open (loop)
+  (when (libuv-loop-closed-p loop)
+    (error "libuv loop is closed"))
+  loop)
+
+(defun %free-ptr (ptr)
+  (when (and (pointerp ptr) (not (null-pointer-p ptr)))
+    (foreign-free ptr)))
+
+(defun %abort-handle (ptr)
+  (when (and (pointerp ptr) (not (null-pointer-p ptr)))
+    (%unregister ptr)
+    (%free-ptr ptr)))
+
 (defclass libuv-backend (event-backend)
   ()
   (:default-initargs :name "libuv"))
@@ -34,6 +48,11 @@
    (kind :initarg :kind :reader libuv-handle-kind)))
 
 (defcallback %uv-close-cb :void ((handle :pointer))
+  (let ((entry (%lookup handle)))
+    (when entry
+      (let ((eh (getf (cdr entry) :event-handle)))
+        (when eh
+          (setf (slot-value eh 'ptr) (null-pointer))))))
   (remhash (%addr handle) *uv-closing*)
   (%unregister handle)
   (foreign-free handle))
@@ -93,19 +112,31 @@
 (defmethod make-event-loop ((backend libuv-backend) &key)
   (load-libuv)
   (let* ((loop-ptr (foreign-alloc :uint8 :count (uv-loop-size)))
-         (async-ptr (foreign-alloc :uint8 :count (uv-handle-size +uv-async+))))
-    (%check (uv-loop-init loop-ptr) "uv_loop_init")
-    (let ((loop (make-instance 'libuv-loop
-                               :backend backend
-                               :ptr loop-ptr
-                               :async async-ptr)))
-      (%check (uv-async-init loop-ptr async-ptr (callback %uv-async-cb))
-              "uv_async_init")
-      (uv-unref async-ptr)
-      (%register async-ptr :async (list :loop loop))
-      loop)))
+         (async-ptr (foreign-alloc :uint8 :count (uv-handle-size +uv-async+)))
+         (loop-inited nil)
+         (done nil))
+    (unwind-protect
+         (progn
+           (%check (uv-loop-init loop-ptr) "uv_loop_init")
+           (setf loop-inited t)
+           (let ((loop (make-instance 'libuv-loop
+                                      :backend backend
+                                      :ptr loop-ptr
+                                      :async async-ptr)))
+             (%check (uv-async-init loop-ptr async-ptr (callback %uv-async-cb))
+                     "uv_async_init")
+             (uv-unref async-ptr)
+             (%register async-ptr :async (list :loop loop))
+             (setf done t)
+             loop))
+      (unless done
+        (when loop-inited
+          (ignore-errors (uv-loop-close loop-ptr)))
+        (%free-ptr loop-ptr)
+        (%free-ptr async-ptr)))))
 
 (defmethod run ((backend libuv-backend) (loop libuv-loop) &key (stop-when-idle t))
+  (%assert-loop-open loop)
   (with-event-loop-var (loop)
     (let ((ptr (libuv-loop-ptr loop))
           (async (libuv-loop-async loop)))
@@ -118,53 +149,78 @@
   loop)
 
 (defmethod stop ((backend libuv-backend) (loop libuv-loop))
+  (%assert-loop-open loop)
   (uv-stop (libuv-loop-ptr loop))
   loop)
 
 (defmethod defer ((backend libuv-backend) (loop libuv-loop) function &key)
+  (%assert-loop-open loop)
   (let* ((ptr (foreign-alloc :uint8 :count (uv-handle-size +uv-idle+)))
-         (eh (make-instance 'libuv-handle :loop loop :ptr ptr :kind :idle)))
-    (%check (uv-idle-init (libuv-loop-ptr loop) ptr) "uv_idle_init")
-    (%register ptr :idle (list :fn function :event-handle eh))
-    (%check (uv-idle-start ptr (callback %uv-idle-cb)) "uv_idle_start")
-    eh))
+         (eh (make-instance 'libuv-handle :loop loop :ptr ptr :kind :idle))
+         (done nil))
+    (unwind-protect
+         (progn
+           (%check (uv-idle-init (libuv-loop-ptr loop) ptr) "uv_idle_init")
+           (%register ptr :idle (list :fn function :event-handle eh))
+           (%check (uv-idle-start ptr (callback %uv-idle-cb)) "uv_idle_start")
+           (setf done t)
+           eh)
+      (unless done
+        (%abort-handle ptr)))))
 
 (defmethod sleep* ((backend libuv-backend) (loop libuv-loop) seconds &key callback)
+  (%assert-loop-open loop)
   (let* ((ptr (foreign-alloc :uint8 :count (uv-handle-size +uv-timer+)))
          (eh (make-instance 'libuv-handle :loop loop :ptr ptr :kind :timer))
          (ms (max 0 (round (* seconds 1000))))
-         (fn (or callback (lambda ()))))
-    (%check (uv-timer-init (libuv-loop-ptr loop) ptr) "uv_timer_init")
-    (%register ptr :timer (list :fn fn :event-handle eh))
-    (%check (uv-timer-start ptr (callback %uv-timer-cb) ms 0) "uv_timer_start")
-    eh))
+         (fn (or callback (lambda ())))
+         (done nil))
+    (unwind-protect
+         (progn
+           (%check (uv-timer-init (libuv-loop-ptr loop) ptr) "uv_timer_init")
+           (%register ptr :timer (list :fn fn :event-handle eh))
+           (%check (uv-timer-start ptr (callback %uv-timer-cb) ms 0) "uv_timer_start")
+           (setf done t)
+           eh)
+      (unless done
+        (%abort-handle ptr)))))
 
 (defmethod cancel ((backend libuv-backend) (handle libuv-handle))
   (call-next-method)
   (let ((ptr (libuv-handle-ptr handle)))
     ;; Idempotent: timer/idle callbacks already uv_close + free the handle.
-    (when (and (pointerp ptr) (not (null-pointer-p ptr)) (%lookup ptr))
-      (case (libuv-handle-kind handle)
-        (:timer (ignore-errors (uv-timer-stop ptr)))
-        (:idle (ignore-errors (uv-idle-stop ptr)))
-        (:poll (ignore-errors (uv-poll-stop ptr))))
-      (%close-handle ptr)))
+    (let ((entry (%lookup ptr)))
+      (when (and (pointerp ptr) (not (null-pointer-p ptr))
+                 entry (eq handle (getf (cdr entry) :event-handle)))
+        (case (libuv-handle-kind handle)
+          (:timer (ignore-errors (uv-timer-stop ptr)))
+          (:idle (ignore-errors (uv-idle-stop ptr)))
+          (:poll (ignore-errors (uv-poll-stop ptr))))
+        (%close-handle ptr))))
   handle)
 
 
 (defmethod register-io ((backend libuv-backend) (loop libuv-loop) fd direction callback &key)
+  (%assert-loop-open loop)
   (let* ((ptr (foreign-alloc :uint8 :count (uv-handle-size +uv-poll+)))
          (eh (make-instance 'libuv-handle :loop loop :ptr ptr :kind :poll))
          (events (ecase direction
                    (:read +uv-readable+)
                    (:write +uv-writable+)
-                   (:read-write (logior +uv-readable+ +uv-writable+)))))
-    (%check (uv-poll-init (libuv-loop-ptr loop) ptr fd) "uv_poll_init")
-    (%register ptr :poll (list :fn callback :event-handle eh))
-    (%check (uv-poll-start ptr events (callback %uv-poll-cb)) "uv_poll_start")
-    eh))
+                   (:read-write (logior +uv-readable+ +uv-writable+))))
+         (done nil))
+    (unwind-protect
+         (progn
+           (%check (uv-poll-init (libuv-loop-ptr loop) ptr fd) "uv_poll_init")
+           (%register ptr :poll (list :fn callback :event-handle eh))
+           (%check (uv-poll-start ptr events (callback %uv-poll-cb)) "uv_poll_start")
+           (setf done t)
+           eh)
+      (unless done
+        (%abort-handle ptr)))))
 
 (defmethod wake ((backend libuv-backend) (loop libuv-loop))
+  (%assert-loop-open loop)
   (%check (uv-async-send (libuv-loop-async loop)) "uv_async_send")
   loop)
 
@@ -187,7 +243,9 @@
                (let ((err (uv-loop-close ptr)))
                  (when (zerop err)
                    (foreign-free ptr)
-                   (setf (libuv-loop-closed-p loop) t)
+                   (setf (libuv-loop-closed-p loop) t
+                         (slot-value loop 'ptr) (null-pointer)
+                         (slot-value loop 'async) (null-pointer))
                    (return-from close-loop loop)))
             finally (%check (uv-loop-close ptr) "uv_loop_close"))))
   loop)
