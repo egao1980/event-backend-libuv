@@ -23,9 +23,13 @@ Conformance suite is shared (`event-protocol/conformance`); this repo sets the b
 ## Overlay
 
 ```bash
-./scripts/build-libuv.sh          # or .ps1 on Windows; writes build/event-protocol-uv-include
+./scripts/build-libuv.sh          # Unix
+./scripts/build-libuv.ps1         # Windows: MSVC + CMake → lib/windows-amd64 + uv.h
 ./scripts/stage-grovel.sh event-backend-libuv
 ```
+
+Windows split: **MSVC builds `libuv.dll`**; **MinGW `gcc` is only for cffi-grovel**, pointed at the
+same installed headers (`EVENT_PROTOCOL_UV_INCLUDE`). Headers match; runtime loads the MSVC DLL.
 
 Ship `native-library` + `cffi-grovel-output` via cl-repository (see `:cl-repo` in the `.asd`).
 

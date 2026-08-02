@@ -115,18 +115,31 @@ jobs:
           cp -a "lib/${{ matrix.os }}-${{ matrix.arch }}/." native-bundle/lib/
           cp -a "grovel/${{ matrix.os }}-${{ matrix.arch }}/." native-bundle/grovel/
 
-      - name: Build libuv (Windows)
+      - name: Build libuv (Windows / MSVC)
         if: matrix.os == 'windows'
         shell: pwsh
         env:
           LIBUV_VERSION: ${{ env.LIBUV_VERSION_DEFAULT }}
         run: |
-          choco install cmake mingw -y
+          choco install cmake -y
           .\scripts\build-libuv.ps1
-          $inc = Get-ChildItem -Path build -Recurse -Directory -Filter include |
-            Where-Object { Test-Path (Join-Path $_.FullName "uv.h") } |
-            Select-Object -First 1 -ExpandProperty FullName
-          "EVENT_PROTOCOL_UV_INCLUDE=$inc" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "EVENT_PROTOCOL_UV_INCLUDE=$env:EVENT_PROTOCOL_UV_INCLUDE" |
+            Out-File -FilePath $env:GITHUB_ENV -Append
+          $lib = Resolve-Path "lib\windows-amd64"
+          "EVENT_PROTOCOL_NATIVE=$lib" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "Path=$lib;$env:Path" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Install MinGW for grovel only (Windows)
+        if: matrix.os == 'windows'
+        shell: pwsh
+        run: |
+          choco install mingw -y
+          $mingw = @(
+            "C:\ProgramData\mingw64\mingw64\bin",
+            "C:\mingw64\bin"
+          ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $mingw) { throw "mingw bin dir not found after choco install" }
+          "Path=$mingw;$env:Path" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Stage grovel (Windows)
         if: matrix.os == 'windows'
