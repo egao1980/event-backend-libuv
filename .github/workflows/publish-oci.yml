@@ -43,6 +43,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Checkout event-protocol
+        uses: actions/checkout@v4
+        with:
+          repository: egao1980/event-protocol
+          path: event-protocol
+
       - name: Install build deps (Linux)
         if: matrix.os == 'linux'
         run: |
@@ -79,11 +85,19 @@ jobs:
           ros install "sbcl-bin/$SBCL_VERSION"
           ros use "sbcl-bin/$SBCL_VERSION"
 
-      - name: Install dependencies
+      - name: Install dependencies (Unix)
+        if: matrix.os != 'windows'
         shell: bash
         run: |
           ros install qlot
           qlot install
+
+      - name: Install dependencies (Windows)
+        if: matrix.os == 'windows'
+        shell: bash
+        run: |
+          ros install cffi
+          ros install rove
 
       - name: Build libuv (Unix)
         if: matrix.os != 'windows'

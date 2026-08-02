@@ -27,6 +27,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Checkout event-protocol
+        uses: actions/checkout@v4
+        with:
+          repository: egao1980/event-protocol
+          path: event-protocol
+
       - name: Install libuv (Linux)
         if: runner.os == 'Linux'
         run: |
@@ -79,14 +85,31 @@ jobs:
           ros install "sbcl-bin/$SBCL_VERSION"
           ros use "sbcl-bin/$SBCL_VERSION"
 
-      - name: Install dependencies
+      - name: Install dependencies (Unix)
+        if: runner.os != 'Windows'
         shell: bash
         run: |
           ros install qlot
           qlot install
 
-      - name: Conformance × libuv
+      # qlot 1.8.x uses sb-posix:symlink — missing on Windows SBCL.
+      - name: Install dependencies (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          ros install cffi
+          ros install rove
+
+      - name: Conformance × libuv (Unix)
+        if: runner.os != 'Windows'
         shell: bash
         run: |
           export HOMEBREW_PREFIX="${HOMEBREW_PREFIX:-/opt/homebrew}"
           qlot exec ros -e '(asdf:test-system "event-backend-libuv")'
+
+      - name: Conformance × libuv (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          export CL_SOURCE_REGISTRY="$(pwd)/event-protocol//:$(pwd)//:"
+          ros -e '(asdf:test-system "event-backend-libuv")' -q
