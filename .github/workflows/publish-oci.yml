@@ -187,6 +187,8 @@ jobs:
       depends-on: cffi event-protocol
       provides: event-backend-libuv
       cffi-libraries: libuv
+      # Until grovel arrange lands on cl-repository main, point at the PR branch.
+      ci-ref: cursor/native-publish-grovel-977e
       source-paths: |
         event-backend-libuv.asd
         src

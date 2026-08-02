@@ -14,10 +14,20 @@
   :depends-on ("cffi" "event-protocol")
   :serial t
   :pathname "src"
-  :components ((:file "package")
-               (cffi-grovel:grovel-file "grovel")
-               (:file "ffi")
-               (:file "backend"))
+  ;; Prefer overlay grovel-cache/ (no CC). Local-dev falls back to grovel-file.
+  :components
+  #.(let* ((asd (or *load-truename* *load-pathname*))
+           (root (when asd (uiop:pathname-directory-pathname asd)))
+           (cache (when root (probe-file (merge-pathnames "grovel-cache/grovel.cffi.lisp" root)))))
+      (if cache
+          '((:file "package")
+            (:file "grovel-cached" :pathname "../grovel-cache/grovel.cffi")
+            (:file "ffi")
+            (:file "backend"))
+          '((:file "package")
+            (cffi-grovel:grovel-file "grovel")
+            (:file "ffi")
+            (:file "backend"))))
   :in-order-to ((test-op (test-op "event-backend-libuv/tests")))
   :properties
   (:cl-repo
