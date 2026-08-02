@@ -47,17 +47,19 @@ cmake --install "$BUILD/build"
 rm -rf "$OUT"
 mkdir -p "$OUT"
 # Stage shared libs (real file + soname/compat).
+# Only wildcard globs — literals like libuv.dylib ignore nullglob and fail on Linux.
 shopt -s nullglob
-lib_staged=0
-for f in "$BUILD/prefix/lib"/libuv.so* "$BUILD/prefix/lib"/libuv.*.dylib "$BUILD/prefix/lib"/libuv.dylib \
-         "$BUILD/prefix/lib64"/libuv.so*; do
-  cp -a "$f" "$OUT/"
-  lib_staged=1
-done
-if [[ "$lib_staged" -eq 0 ]]; then
+libs=(
+  "$BUILD/prefix/lib"/libuv.so*
+  "$BUILD/prefix/lib"/libuv*.dylib
+  "$BUILD/prefix/lib64"/libuv.so*
+)
+if ((${#libs[@]} == 0)); then
   echo "libuv shared library not found under $BUILD/prefix" >&2
+  ls -la "$BUILD/prefix/lib" "$BUILD/prefix/lib64" 2>/dev/null || true
   exit 1
 fi
+cp -a "${libs[@]}" "$OUT/"
 # Headers for grovel
 mkdir -p "$BUILD/prefix/include"
 export EVENT_PROTOCOL_UV_INCLUDE="$BUILD/prefix/include"
