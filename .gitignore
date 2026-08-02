@@ -1,0 +1,8 @@
+build/
+lib/
+grovel/
+*.fasl
+.qlot/
+*~
+.DS_Store
+qlfile.lock

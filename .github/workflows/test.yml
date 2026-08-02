@@ -1,0 +1,133 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Unix: cl-repository-style. Windows: Roswell zip; no qlot (sb-posix:symlink).
+# event-protocol via actions/checkout + qlfile `local` (never qlot `github` — API rate).
+concurrency:
+  group: event-backend-libuv-test-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  SBCL_VERSION: 2.4.11
+  ROSWELL_VERSION: "26.02.116"
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+          - os: macos-latest
+          - os: windows-latest
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkout event-protocol
+        uses: actions/checkout@v4
+        with:
+          repository: egao1980/event-protocol
+          path: event-protocol
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install libuv (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libuv1-dev build-essential pkg-config
+
+      - name: Install libuv (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install libuv
+          echo "HOMEBREW_PREFIX=$(brew --prefix)" >> "$GITHUB_ENV"
+
+      # libuv = MSVC (build-libuv.ps1). MinGW only for cffi-grovel cc against the
+      # same installed uv.h — do not put MinGW on PATH before the MSVC cmake build.
+      - name: Build libuv (Windows / MSVC)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # cmake/cl come from the runner's VS Build Tools — no Chocolatey cmake.
+          .\scripts\build-libuv.ps1
+          "EVENT_PROTOCOL_UV_INCLUDE=$env:EVENT_PROTOCOL_UV_INCLUDE" |
+            Out-File -FilePath $env:GITHUB_ENV -Append
+          $lib = Resolve-Path "lib\windows-amd64"
+          "EVENT_PROTOCOL_NATIVE=$lib" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "Path=$lib;$env:Path" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Install MinGW for grovel only (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install mingw -y
+          $mingw = @(
+            "C:\ProgramData\mingw64\mingw64\bin",
+            "C:\mingw64\bin"
+          ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $mingw) { throw "mingw bin dir not found after choco install" }
+          "Path=$mingw;$env:Path" | Out-File -FilePath $env:GITHUB_ENV -Append
+          & "$mingw\gcc.exe" --version | Select-Object -First 1
+
+      - name: Install Roswell (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          curl -sL https://raw.githubusercontent.com/roswell/roswell/master/scripts/install-for-ci.sh | bash
+          echo "$HOME/.roswell/bin" >> "$GITHUB_PATH"
+
+      - name: Install Roswell (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          curl -sL "https://github.com/roswell/roswell/releases/download/v${ROSWELL_VERSION}/roswell_${ROSWELL_VERSION}_amd64.zip" \
+            -o /tmp/roswell.zip
+          rm -rf /c/roswell
+          mkdir -p /c/roswell
+          unzip -qo /tmp/roswell.zip -d /c/roswell
+          echo "/c/roswell/roswell" >> "$GITHUB_PATH"
+          echo "$HOME/.roswell/bin" >> "$GITHUB_PATH"
+          /c/roswell/roswell/ros.exe version
+
+      - name: Install SBCL
+        shell: bash
+        run: |
+          ros install "sbcl-bin/$SBCL_VERSION"
+          ros use "sbcl-bin/$SBCL_VERSION"
+
+      - name: Install dependencies (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          ros install qlot
+          qlot install
+
+      - name: Install dependencies (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          ros install cffi
+          ros install rove
+
+      - name: Conformance × libuv (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          export HOMEBREW_PREFIX="${HOMEBREW_PREFIX:-/opt/homebrew}"
+          qlot exec ros -e '(asdf:test-system "event-backend-libuv")'
+
+      - name: Conformance × libuv (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          export CL_SOURCE_REGISTRY="$(pwd)/event-protocol//:$(pwd)//:"
+          ros -e '(asdf:test-system "event-backend-libuv")' -q
