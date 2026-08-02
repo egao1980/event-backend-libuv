@@ -76,8 +76,16 @@ msys_path() {
 LISP_ROOT="$(lisp_path "$ROOT")"
 LISP_PROTO="$(lisp_path "$PROTO")"
 
-# Match test.yml: registry discovery (load-asd alone is fragile on Windows).
-export CL_SOURCE_REGISTRY="${LISP_PROTO}//:${LISP_ROOT}//:${CL_SOURCE_REGISTRY:-}"
+# Registry discovery (load-asd alone is fragile on Windows).
+# On Windows use ';' — ':' is the drive-letter separator (D:/...).
+# Prefer MSYS paths in the registry string so either separator works.
+REG_ROOT="$(msys_path "$ROOT")"
+REG_PROTO="$(msys_path "$PROTO")"
+if [[ "$os" == windows ]]; then
+  export CL_SOURCE_REGISTRY="${REG_PROTO}//;${REG_ROOT}//;${CL_SOURCE_REGISTRY:-}"
+else
+  export CL_SOURCE_REGISTRY="${REG_PROTO}//:${REG_ROOT}//:${CL_SOURCE_REGISTRY:-}"
+fi
 
 # Stage only package + grovel — ffi/backend are irrelevant for cffi-grovel-output.
 STAGE_LISP="$(mktemp "${TMPDIR:-/tmp}/stage-grovel.XXXXXX")"
