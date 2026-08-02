@@ -80,6 +80,12 @@
 
 (defcfun ("uv_poll_init" uv-poll-init) :int
   (loop :pointer) (handle :pointer) (fd :int))
+#+windows
+(defcfun ("uv_poll_init_socket" uv-poll-init-socket) :int
+  (loop :pointer) (handle :pointer) (socket :uint64))
+(defun uv-poll-init-fd (loop handle fd)
+  #+windows (uv-poll-init-socket loop handle fd)
+  #-windows (uv-poll-init loop handle fd))
 (defcfun ("uv_poll_start" uv-poll-start) :int
   (handle :pointer) (events :int) (cb :pointer))
 (defcfun ("uv_poll_stop" uv-poll-stop) :int (handle :pointer))

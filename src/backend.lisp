@@ -86,9 +86,10 @@
              (fn (getf data :fn))
              (eh (getf data :event-handle)))
         (uv-timer-stop handle)
-        (when (and fn eh (not (event-handle-canceled-p eh)))
-          (funcall fn))
-        (%close-handle handle)))))
+        (unwind-protect
+             (when (and fn eh (not (event-handle-canceled-p eh)))
+               (funcall fn))
+          (%close-handle handle))))))
 
 (defcallback %uv-idle-cb :void ((handle :pointer))
   (let ((entry (%lookup handle)))
@@ -97,9 +98,10 @@
              (fn (getf data :fn))
              (eh (getf data :event-handle)))
         (uv-idle-stop handle)
-        (when (and fn eh (not (event-handle-canceled-p eh)))
-          (funcall fn))
-        (%close-handle handle)))))
+        (unwind-protect
+             (when (and fn eh (not (event-handle-canceled-p eh)))
+               (funcall fn))
+          (%close-handle handle))))))
 
 (defcallback %uv-async-cb :void ((handle :pointer))
   (let ((entry (%lookup handle)))
@@ -226,7 +228,7 @@
          (done nil))
     (unwind-protect
          (progn
-           (%check (uv-poll-init (libuv-loop-ptr loop) ptr fd) "uv_poll_init")
+           (%check (uv-poll-init-fd (libuv-loop-ptr loop) ptr fd) "uv_poll_init")
            (%register ptr :poll (list :fn callback :event-handle eh))
            (%check (uv-poll-start ptr events (callback %uv-poll-cb)) "uv_poll_start")
            (setf done t)
