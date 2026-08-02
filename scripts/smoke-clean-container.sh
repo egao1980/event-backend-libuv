@@ -46,6 +46,9 @@ cat >"$SMOKE_LISP" <<'EOF'
    (:directory ,(uiop:ensure-directory-pathname *pkg*))
    (:directory ,(uiop:ensure-directory-pathname *proto*))
    :inherit-configuration))
+;; Avoid ql local-projects index writes when /ql is reused across runs.
+(when (find-package :ql)
+  (ignore-errors (setf (symbol-value (find-symbol "*LOCAL-PROJECT-DIRECTORIES*" :ql)) nil)))
 (ql:quickload "cffi" :silent t)
 (asdf:load-system "event-protocol")
 (asdf:load-system "event-backend-libuv")
@@ -80,9 +83,11 @@ if [[ ! -f "$QL/setup.lisp" ]]; then
     bash -c 'apt-get update -qq && apt-get install -y -qq ca-certificates curl sbcl >/dev/null \
       && curl -fsSL -o /tmp/ql.lisp https://beta.quicklisp.org/quicklisp.lisp \
       && sbcl --noinform --non-interactive --load /tmp/ql.lisp \
-           --eval "(quicklisp-quickstart:install :path #p\"/ql/\")" >/dev/null'
+           --eval "(quicklisp-quickstart:install :path #p\"/ql/\")" \
+           --eval "(ql:quickload \"cffi\" :silent t)" >/dev/null'
 fi
 
+# Package + protocol stay read-only; Quicklisp needs write for fasls / indexes.
 docker run --rm --platform linux/amd64 \
   -e DEBIAN_FRONTEND=noninteractive \
   -e EVENT_BACKEND_LIBUV_ROOT=/opt/event-backend-libuv \
@@ -90,7 +95,7 @@ docker run --rm --platform linux/amd64 \
   -e LD_LIBRARY_PATH=/opt/event-backend-libuv/native \
   -v "$PKG:/opt/event-backend-libuv:ro" \
   -v "$PROTO:/opt/event-protocol:ro" \
-  -v "$QL:/ql:ro" \
+  -v "$QL:/ql" \
   -v "$SMOKE_LISP:/opt/smoke.lisp:ro" \
   ubuntu:24.04 \
   bash -c 'apt-get update -qq && apt-get install -y -qq ca-certificates sbcl >/dev/null \
