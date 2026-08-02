@@ -121,7 +121,7 @@ jobs:
         env:
           LIBUV_VERSION: ${{ env.LIBUV_VERSION_DEFAULT }}
         run: |
-          choco install cmake -y
+          # cmake/cl from VS Build Tools on the runner — no Chocolatey cmake.
           .\scripts\build-libuv.ps1
           "EVENT_PROTOCOL_UV_INCLUDE=$env:EVENT_PROTOCOL_UV_INCLUDE" |
             Out-File -FilePath $env:GITHUB_ENV -Append

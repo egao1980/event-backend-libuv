@@ -57,7 +57,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          choco install cmake -y
+          # cmake/cl come from the runner's VS Build Tools — no Chocolatey cmake.
           .\scripts\build-libuv.ps1
           "EVENT_PROTOCOL_UV_INCLUDE=$env:EVENT_PROTOCOL_UV_INCLUDE" |
             Out-File -FilePath $env:GITHUB_ENV -Append
