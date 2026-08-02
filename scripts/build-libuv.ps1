@@ -40,7 +40,6 @@ cmd /c "`"$devCmd`" -arch=amd64 -host_arch=amd64 && set" | ForEach-Object {
   }
 }
 
-# Prefer cmake already on PATH / shipped with VS — do not require Chocolatey.
 $cmake = $null
 if (Get-Command cmake -ErrorAction SilentlyContinue) {
   $cmake = (Get-Command cmake).Source
@@ -60,39 +59,60 @@ if (-not (Get-Command nmake -ErrorAction SilentlyContinue)) {
   throw "nmake not on PATH after VsDevCmd"
 }
 
-$Prefix = Join-Path $Build "prefix"
+# Avoid the name $Prefix — NMake treats $P... as macros; a bare
+# -DCMAKE_INSTALL_PREFIX=$Prefix has been observed to install into a literal "$Prefix" dir.
+$InstallPrefix = Join-Path $Build "prefix"
 $CmakeBuild = Join-Path $Build "build"
 Write-Host "==> MSVC/NMake build libuv $Version -> $Out"
-# NMake uses the active cl.exe — avoids "Visual Studio 17 2022 could not find any instance".
-& $cmake -S $Build -B $CmakeBuild `
-  -G "NMake Makefiles" `
-  -DCMAKE_BUILD_TYPE=Release `
-  -DCMAKE_INSTALL_PREFIX=$Prefix `
-  -DLIBUV_BUILD_SHARED=ON `
-  -DLIBUV_BUILD_TESTS=OFF
+Write-Host "==> install prefix: $InstallPrefix"
+
+$configureArgs = @(
+  "-S", $Build
+  "-B", $CmakeBuild
+  "-G", "NMake Makefiles"
+  "-DCMAKE_BUILD_TYPE=Release"
+  "-DCMAKE_INSTALL_PREFIX=$InstallPrefix"
+  "-DLIBUV_BUILD_SHARED=ON"
+  "-DLIBUV_BUILD_TESTS=OFF"
+)
+& $cmake @configureArgs
 if ($LASTEXITCODE -ne 0) { throw "cmake configure failed" }
+
 & $cmake --build $CmakeBuild
 if ($LASTEXITCODE -ne 0) { throw "cmake build failed" }
-& $cmake --install $CmakeBuild
+
+# --prefix forces the destination even if configure stored a bad prefix.
+& $cmake --install $CmakeBuild --prefix $InstallPrefix
 if ($LASTEXITCODE -ne 0) { throw "cmake install failed" }
 
 if (Test-Path $Out) { Remove-Item -Recurse -Force $Out }
 New-Item -ItemType Directory -Force -Path $Out | Out-Null
-Get-ChildItem -Path (Join-Path $Prefix "bin") -Filter "uv.dll" -ErrorAction SilentlyContinue |
-  ForEach-Object { Copy-Item $_.FullName (Join-Path $Out "libuv.dll") }
-Get-ChildItem -Path (Join-Path $Prefix "lib") -Filter "*.dll" -ErrorAction SilentlyContinue |
-  ForEach-Object { Copy-Item $_.FullName $Out -Force }
-if (-not (Test-Path (Join-Path $Out "libuv.dll"))) {
-  $cand = Get-ChildItem -Path $Prefix -Recurse -Filter "*uv*.dll" | Select-Object -First 1
-  if ($cand) { Copy-Item $cand.FullName (Join-Path $Out "libuv.dll") }
-}
-if (-not (Test-Path (Join-Path $Out "libuv.dll"))) {
-  throw "libuv.dll not found under $Prefix"
-}
 
-$inc = Join-Path $Prefix "include"
+$uvDll = $null
+foreach ($cand in @(
+    (Join-Path $InstallPrefix "bin\uv.dll")
+    (Join-Path $InstallPrefix "lib\uv.dll")
+    (Join-Path $CmakeBuild "uv.dll")
+  )) {
+  if (Test-Path $cand) { $uvDll = $cand; break }
+}
+if (-not $uvDll) {
+  $uvDll = Get-ChildItem -Path $Build -Recurse -Filter "uv.dll" -ErrorAction SilentlyContinue |
+    Select-Object -First 1 -ExpandProperty FullName
+}
+if (-not $uvDll) {
+  throw "uv.dll not found under $Build after install"
+}
+Copy-Item $uvDll (Join-Path $Out "libuv.dll") -Force
+Write-Host "==> staged $uvDll -> $(Join-Path $Out 'libuv.dll')"
+
+$inc = Join-Path $InstallPrefix "include"
 if (-not (Test-Path (Join-Path $inc "uv.h"))) {
-  throw "uv.h not found at $inc"
+  $inc = Get-ChildItem -Path $Build -Recurse -Filter "uv.h" -ErrorAction SilentlyContinue |
+    Select-Object -First 1 -ExpandProperty DirectoryName
+}
+if (-not $inc -or -not (Test-Path (Join-Path $inc "uv.h"))) {
+  throw "uv.h not found under $InstallPrefix"
 }
 $env:EVENT_PROTOCOL_UV_INCLUDE = $inc
 Write-Host "EVENT_PROTOCOL_UV_INCLUDE=$($env:EVENT_PROTOCOL_UV_INCLUDE)"
