@@ -29,21 +29,24 @@
 (defun %steal-wake-queue (loop)
   "Atomically take and clear LOOP's wake-queue (newest-first)."
   #+sbcl
-  (loop for old = (slot-value loop 'wake-queue)
-        when (eq (sb-ext:compare-and-swap (slot-value loop 'wake-queue) old nil) old)
-          return old)
-  #-sbcl
+  (return-from %steal-wake-queue
+    (loop for old = (slot-value loop 'wake-queue)
+          when (eq (sb-ext:compare-and-swap
+                    (slot-value loop 'wake-queue) old nil)
+                   old)
+            return old))
   (shiftf (libuv-loop-wake-queue loop) nil))
 
 (defun %push-wake-queue (loop function)
   "Atomically push FUNCTION onto LOOP's wake-queue."
   #+sbcl
-  (loop for old = (slot-value loop 'wake-queue)
-        when (eq (sb-ext:compare-and-swap (slot-value loop 'wake-queue)
-                                          old (cons function old))
-                 old)
-          return function)
-  #-sbcl
+  (return-from %push-wake-queue
+    (loop for old = (slot-value loop 'wake-queue)
+          when (eq (sb-ext:compare-and-swap
+                    (slot-value loop 'wake-queue)
+                    old (cons function old))
+                   old)
+            return function))
   (push function (libuv-loop-wake-queue loop)))
 
 (defun %abort-handle (ptr)
@@ -289,6 +292,6 @@
                   (slot-value loop 'ptr) (null-pointer)
                   (slot-value loop 'async) (null-pointer))
             (return-from close-loop loop))))
-      (%check (uv-loop-close ptr) "uv_loop_close"))))
+      (%check (uv-loop-close ptr) "uv_loop_close")))
   loop)
 
