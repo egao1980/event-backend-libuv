@@ -37,9 +37,10 @@
             (%close-handle ptr)
             (when loop-ptr
               (let ((addr (%addr ptr)))
-                (loop for i below 64
-                      while (gethash addr *uv-closing*)
-                      do (uv-run loop-ptr +uv-run-once+)))))
+                (dotimes (i 64)
+                  (unless (gethash addr *uv-closing*)
+                    (return))
+                  (uv-run loop-ptr +uv-run-once+)))))
           (progn
             (%unregister ptr)
             (%free-ptr ptr))))))
@@ -255,15 +256,15 @@
           (ptr (libuv-loop-ptr loop)))
       (ignore-errors (%close-handle async))
       ;; uv_close is async — run until uv_loop_close succeeds (or give up).
-      (loop for i below 64
-            do (uv-run ptr +uv-run-once+)
-               (let ((err (uv-loop-close ptr)))
-                 (when (zerop err)
-                   (foreign-free ptr)
-                   (setf (libuv-loop-closed-p loop) t
-                         (slot-value loop 'ptr) (null-pointer)
-                         (slot-value loop 'async) (null-pointer))
-                   (return-from close-loop loop)))
-            finally (%check (uv-loop-close ptr) "uv_loop_close"))))
+      (dotimes (i 64)
+        (uv-run ptr +uv-run-once+)
+        (let ((err (uv-loop-close ptr)))
+          (when (zerop err)
+            (foreign-free ptr)
+            (setf (libuv-loop-closed-p loop) t
+                  (slot-value loop 'ptr) (null-pointer)
+                  (slot-value loop 'async) (null-pointer))
+            (return-from close-loop loop))))
+      (%check (uv-loop-close ptr) "uv_loop_close"))))
   loop)
 
