@@ -70,23 +70,29 @@ run_lisp() {
   fi
 }
 
+# Hide grovel-cache so ASD runs grovel instead of reusing stale cached output.
+if [[ -d "$ROOT/grovel-cache" ]]; then
+  mv "$ROOT/grovel-cache" "$ROOT/.grovel-cache.staging-hidden"
+  restore_grovel_cache() {
+    if [[ -d "$ROOT/.grovel-cache.staging-hidden" ]]; then
+      mv "$ROOT/.grovel-cache.staging-hidden" "$ROOT/grovel-cache"
+    fi
+  }
+  trap restore_grovel_cache EXIT
+fi
+
 LOG="$(mktemp)"
 
 run_lisp >"$LOG" 2>&1 || { tail -80 "$LOG"; exit 1; }
 
-CACHED_GROVEL="$ROOT/grovel-cache/grovel.cffi.lisp"
+CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/common-lisp"
+mapfile -d '' -t _grovel_cache < <(find "$CACHE" -path "*${SYS}*/grovel.processed-grovel-file" -print0 2>/dev/null || true)
 PROCESSED=""
-if [[ -f "$CACHED_GROVEL" ]]; then
-  PROCESSED="$CACHED_GROVEL"
-else
-  CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/common-lisp"
-  mapfile -d '' -t _grovel_cache < <(find "$CACHE" -path "*${SYS}*/grovel.processed-grovel-file" -print0 2>/dev/null || true)
-  if ((${#_grovel_cache[@]} > 0)); then
-    PROCESSED="$(ls -t "${_grovel_cache[@]}" 2>/dev/null | head -1)"
-  fi
+if ((${#_grovel_cache[@]} > 0)); then
+  PROCESSED="$(ls -t "${_grovel_cache[@]}" 2>/dev/null | head -1)"
 fi
 if [[ -z "$PROCESSED" || ! -f "$PROCESSED" ]]; then
-  echo "could not locate grovel output (grovel-cache/grovel.cffi.lisp or grovel.processed-grovel-file); log:" >&2
+  echo "could not locate grovel.processed-grovel-file; log:" >&2
   tail -40 "$LOG" >&2
   exit 1
 fi
