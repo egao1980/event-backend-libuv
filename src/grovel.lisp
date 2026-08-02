@@ -3,17 +3,20 @@
 ;;;;
 ;;;; Include search: set CPATH or EVENT_PROTOCOL_UV_INCLUDE on builders.
 ;;;; Local-dev also picks up Homebrew via cc-flags below.
+;;;;
+;;;; Note: this file is DSL for cffi-grovel — only grovel forms (or #. that
+;;;; expand to them). Plain LET/WHEN are unknown syntax.
 (in-package #:event-backend-libuv)
 
-(let ((uv-include (uiop:getenv "EVENT_PROTOCOL_UV_INCLUDE")))
-  (when uv-include
-    (cc-flags (format nil "-I~A/" (string-right-trim "/" uv-include)))))
-
-(cc-flags "-I/usr/local/include/"
-          "-I/opt/homebrew/include/"
-          "-I/usr/include/"
-          "-Ic:/include/"
-          "-Ic:/include/uv/")
+#.(let* ((uv (uiop:getenv "EVENT_PROTOCOL_UV_INCLUDE"))
+         (extra (when (and uv (plusp (length uv)))
+                  (list (format nil "-I~A/" (string-right-trim "/" uv))))))
+    `(cc-flags ,@extra
+               "-I/usr/local/include/"
+               "-I/opt/homebrew/include/"
+               "-I/usr/include/"
+               "-Ic:/include/"
+               "-Ic:/include/uv/"))
 
 (include "uv.h")
 
