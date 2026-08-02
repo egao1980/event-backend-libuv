@@ -23,7 +23,7 @@ Conformance suite is shared (`event-protocol/conformance`); this repo sets the b
 ## Overlay
 
 ```bash
-./scripts/build-libuv.sh          # or .ps1 on Windows
+./scripts/build-libuv.sh          # or .ps1 on Windows; writes build/event-protocol-uv-include
 ./scripts/stage-grovel.sh event-backend-libuv
 ```
 

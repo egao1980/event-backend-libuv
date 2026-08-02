@@ -254,7 +254,7 @@
       (ignore-errors (%close-handle async))
       ;; uv_close is async — run until uv_loop_close succeeds (or give up).
       (loop for i below 64
-            do (uv-run ptr +uv-run-default+)
+            do (uv-run ptr +uv-run-once+)
                (let ((err (uv-loop-close ptr)))
                  (when (zerop err)
                    (foreign-free ptr)

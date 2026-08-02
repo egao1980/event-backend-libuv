@@ -7,6 +7,10 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SYS="${1:?system name}"
 
+if [[ -z "${EVENT_PROTOCOL_UV_INCLUDE:-}" && -f "$ROOT/build/event-protocol-uv-include" ]]; then
+  export EVENT_PROTOCOL_UV_INCLUDE="$(cat "$ROOT/build/event-protocol-uv-include")"
+fi
+
 uname_s="$(uname -s)"
 uname_m="$(uname -m)"
 case "$uname_s" in

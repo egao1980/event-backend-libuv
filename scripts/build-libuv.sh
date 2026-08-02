@@ -55,5 +55,6 @@ done
 # Headers for grovel
 mkdir -p "$BUILD/prefix/include"
 export EVENT_PROTOCOL_UV_INCLUDE="$BUILD/prefix/include"
+printf '%s\n' "$EVENT_PROTOCOL_UV_INCLUDE" >"$ROOT/build/event-protocol-uv-include"
 echo "EVENT_PROTOCOL_UV_INCLUDE=$EVENT_PROTOCOL_UV_INCLUDE"
 echo "staged:" && ls -la "$OUT"
