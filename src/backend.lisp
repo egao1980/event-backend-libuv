@@ -1,6 +1,7 @@
 (in-package #:event-backend-libuv)
 
 (defvar *uv-callbacks* (make-hash-table :test #'eql))
+(defvar *uv-closing* (make-hash-table :test #'eql))
 
 (defun %addr (ptr) (pointer-address ptr))
 
@@ -33,12 +34,16 @@
    (kind :initarg :kind :reader libuv-handle-kind)))
 
 (defcallback %uv-close-cb :void ((handle :pointer))
+  (remhash (%addr handle) *uv-closing*)
   (%unregister handle)
   (foreign-free handle))
 
 (defun %close-handle (ptr)
   (when (and (pointerp ptr) (not (null-pointer-p ptr)))
-    (uv-close ptr (callback %uv-close-cb))))
+    (let ((addr (%addr ptr)))
+      (unless (gethash addr *uv-closing*)
+        (setf (gethash addr *uv-closing*) t)
+        (uv-close ptr (callback %uv-close-cb))))))
 
 (defcallback %uv-timer-cb :void ((handle :pointer))
   (let ((entry (%lookup handle)))
@@ -66,7 +71,9 @@
   (let ((entry (%lookup handle)))
     (when entry
       (let ((loop (getf (cdr entry) :loop)))
-        (dolist (fn (nreverse (shiftf (libuv-loop-wake-queue loop) nil)))
+        (dolist (fn (nreverse
+                      #+sbcl (sb-ext:atomic-exchange (slot-value loop 'wake-queue) nil)
+                      #-sbcl (shiftf (libuv-loop-wake-queue loop) nil)))
           (handler-case (funcall fn)
             (error (e)
               (warn "wake callback error: ~A" e))))))))
@@ -99,9 +106,15 @@
       loop)))
 
 (defmethod run ((backend libuv-backend) (loop libuv-loop) &key (stop-when-idle t))
-  (declare (ignore stop-when-idle))
   (with-event-loop-var (loop)
-    (uv-run (libuv-loop-ptr loop) +uv-run-default+))
+    (let ((ptr (libuv-loop-ptr loop))
+          (async (libuv-loop-async loop)))
+      (unless stop-when-idle
+        (uv-ref async))
+      (unwind-protect
+           (uv-run ptr +uv-run-default+)
+        (unless stop-when-idle
+          (uv-unref async)))))
   loop)
 
 (defmethod stop ((backend libuv-backend) (loop libuv-loop))

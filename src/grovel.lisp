@@ -5,6 +5,10 @@
 ;;;; Local-dev also picks up Homebrew via cc-flags below.
 (in-package #:event-backend-libuv)
 
+(let ((uv-include (uiop:getenv "EVENT_PROTOCOL_UV_INCLUDE")))
+  (when uv-include
+    (cc-flags (format nil "-I~A/" (string-right-trim "/" uv-include)))))
+
 (cc-flags "-I/usr/local/include/"
           "-I/opt/homebrew/include/"
           "-I/usr/include/"

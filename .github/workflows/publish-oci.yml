@@ -51,8 +51,7 @@ jobs:
         if: matrix.os == 'darwin'
         run: brew install cmake || true
 
-      - name: Setup Common Lisp (Unix)
-        if: matrix.os != 'windows'
+      - name: Setup Common Lisp
         uses: 40ants/setup-lisp@v4
         with:
           roswell-version: latest
@@ -87,9 +86,20 @@ jobs:
         run: |
           choco install cmake mingw -y
           .\scripts\build-libuv.ps1
-          # Grovel via Roswell when available; else skip cache staging in draft CI
-          New-Item -ItemType Directory -Force -Path native-bundle/lib, native-bundle/grovel | Out-Null
-          Copy-Item -Path "lib\${{ matrix.os }}-${{ matrix.arch }}\*" -Destination native-bundle/lib -Force
+          $inc = Get-ChildItem -Path build -Recurse -Directory -Filter include |
+            Where-Object { Test-Path (Join-Path $_.FullName "uv.h") } |
+            Select-Object -First 1 -ExpandProperty FullName
+          "EVENT_PROTOCOL_UV_INCLUDE=$inc" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Stage grovel (Windows)
+        if: matrix.os == 'windows'
+        shell: bash
+        run: |
+          export CL_SOURCE_REGISTRY="$(pwd)/event-protocol//:$(pwd)//:"
+          ./scripts/stage-grovel.sh event-backend-libuv
+          mkdir -p native-bundle/lib native-bundle/grovel
+          cp -a "lib/${{ matrix.os }}-${{ matrix.arch }}/." native-bundle/lib/
+          cp -a "grovel/${{ matrix.os }}-${{ matrix.arch }}/." native-bundle/grovel/
 
       - name: Upload native+grovel artifact
         uses: actions/upload-artifact@v4

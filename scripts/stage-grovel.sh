@@ -65,9 +65,10 @@ run_lisp() {
 run_lisp >"$LOG" 2>&1 || { tail -80 "$LOG"; exit 1; }
 
 CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/common-lisp"
-PROCESSED="$(find "$CACHE" -path "*${SYS}*/grovel.processed-grovel-file" 2>/dev/null | xargs ls -t 2>/dev/null | head -1 || true)"
-if [[ -z "$PROCESSED" ]]; then
-  PROCESSED="$(find "$CACHE" -name 'grovel.processed-grovel-file' 2>/dev/null | xargs ls -t 2>/dev/null | head -1 || true)"
+mapfile -d '' -t _grovel_cache < <(find "$CACHE" -path "*${SYS}*/grovel.processed-grovel-file" -print0 2>/dev/null || true)
+PROCESSED=""
+if ((${#_grovel_cache[@]} > 0)); then
+  PROCESSED="$(ls -t "${_grovel_cache[@]}" 2>/dev/null | head -1)"
 fi
 if [[ -z "$PROCESSED" || ! -f "$PROCESSED" ]]; then
   echo "could not locate grovel.processed-grovel-file; log:" >&2
