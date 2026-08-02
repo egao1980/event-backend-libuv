@@ -116,6 +116,7 @@ jobs:
         if: matrix.os == 'windows'
         shell: bash
         run: |
+          chmod +x scripts/stage-grovel.sh
           ./scripts/stage-grovel.sh event-backend-libuv
           mkdir -p native-bundle/lib native-bundle/grovel
           cp -a "lib/${{ matrix.os }}-${{ matrix.arch }}/." native-bundle/lib/
