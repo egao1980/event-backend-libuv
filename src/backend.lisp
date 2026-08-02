@@ -35,7 +35,8 @@
             (when eh
               (setf (slot-value eh 'ptr) (null-pointer)))
             (%close-handle ptr)
-            (when loop-ptr
+            (when (and loop (not (libuv-loop-closed-p loop))
+                       loop-ptr (not (null-pointer-p loop-ptr)))
               (let ((addr (%addr ptr)))
                 (dotimes (i 64)
                   (unless (gethash addr *uv-closing*)
@@ -89,7 +90,8 @@
         (uv-timer-stop handle)
         (unwind-protect
              (when (and fn eh (not (event-handle-canceled-p eh)))
-               (funcall fn))
+               (handler-case (funcall fn)
+                 (error (e) (warn "timer callback error: ~A" e))))
           (%close-handle handle))))))
 
 (defcallback %uv-idle-cb :void ((handle :pointer))
@@ -101,7 +103,8 @@
         (uv-idle-stop handle)
         (unwind-protect
              (when (and fn eh (not (event-handle-canceled-p eh)))
-               (funcall fn))
+               (handler-case (funcall fn)
+                 (error (e) (warn "idle callback error: ~A" e))))
           (%close-handle handle))))))
 
 (defcallback %uv-async-cb :void ((handle :pointer))
@@ -123,9 +126,11 @@
              (fn (getf data :fn))
              (eh (getf data :event-handle)))
         (when (and fn eh (not (event-handle-canceled-p eh)))
-          (if (minusp status)
-              (funcall fn :error status)
-              (funcall fn :ok)))))))
+          (handler-case
+              (if (minusp status)
+                  (funcall fn :error status)
+                  (funcall fn :ok))
+            (error (e) (warn "poll callback error: ~A" e))))))))
 
 (defmethod make-event-loop ((backend libuv-backend) &key)
   (load-libuv)
