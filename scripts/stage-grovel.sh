@@ -76,16 +76,9 @@ msys_path() {
 LISP_ROOT="$(lisp_path "$ROOT")"
 LISP_PROTO="$(lisp_path "$PROTO")"
 
-# Registry discovery (load-asd alone is fragile on Windows).
-# On Windows use ';' — ':' is the drive-letter separator (D:/...).
-# Prefer MSYS paths in the registry string so either separator works.
-REG_ROOT="$(msys_path "$ROOT")"
-REG_PROTO="$(msys_path "$PROTO")"
-if [[ "$os" == windows ]]; then
-  export CL_SOURCE_REGISTRY="${REG_PROTO}//;${REG_ROOT}//;${CL_SOURCE_REGISTRY:-}"
-else
-  export CL_SOURCE_REGISTRY="${REG_PROTO}//:${REG_ROOT}//:${CL_SOURCE_REGISTRY:-}"
-fi
+# MSYS paths + ':' (same as test.yml). Do NOT use D:/... here — ':' is
+# ASDF's entry separator, so drive letters get split.
+export CL_SOURCE_REGISTRY="$(msys_path "$PROTO")//:$(msys_path "$ROOT")//:${CL_SOURCE_REGISTRY:-}"
 
 # Stage only package + grovel — ffi/backend are irrelevant for cffi-grovel-output.
 STAGE_LISP="$(mktemp "${TMPDIR:-/tmp}/stage-grovel.XXXXXX")"
@@ -98,12 +91,14 @@ cat >"$STAGE_LISP" <<EOF
         (format *error-output* "~&UNHANDLED: ~A~%" c)
         (uiop:quit 1)))
 (asdf:load-system "cffi-grovel")
-(asdf:load-system "event-protocol")
+;; Drive paths for load-asd (MSYS /d/... fails ASDF on Windows).
+(asdf:load-asd #p"${LISP_PROTO}/event-protocol.asd")
 (asdf:load-asd #p"${LISP_ROOT}/${SYS}.asd")
-(let* ((sys (asdf:find-system "${SYS}"))
-       (pkg (asdf:find-component sys "package"))
-       (grovel (or (asdf:find-component sys "grovel")
-                   (asdf:find-component sys "grovel-cached"))))
+(asdf:load-system "event-protocol")
+(let* ((sys (asdf:find-system "${SYS}" nil))
+       (pkg (and sys (asdf:find-component sys "package")))
+       (grovel (and sys (or (asdf:find-component sys "grovel")
+                            (asdf:find-component sys "grovel-cached")))))
   (unless (and pkg grovel)
     (error "missing package/grovel components in ~A" "${SYS}"))
   (asdf:operate 'asdf:load-op pkg)
