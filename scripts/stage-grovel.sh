@@ -57,6 +57,14 @@ lisp_path() {
     printf '%s' "$p"
   fi
 }
+msys_path() {
+  local p="$1"
+  if command -v cygpath >/dev/null 2>&1; then
+    cygpath -u "$p"
+  else
+    printf '%s' "$p"
+  fi
+}
 LISP_ROOT="$(lisp_path "$ROOT")"
 LISP_PROTO="$(lisp_path "$PROTO")"
 
@@ -115,7 +123,7 @@ run_lisp >"$LOG" 2>&1 || { tail -80 "$LOG"; exit 1; }
 CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/common-lisp"
 PROCESSED="$(find "$CACHE" -path "*${SYS}*/grovel.processed-grovel-file" 2>/dev/null | xargs ls -t 2>/dev/null | head -1 || true)"
 if [[ -z "$PROCESSED" || ! -f "$PROCESSED" ]] && [[ -n "${LOCALAPPDATA:-}" ]]; then
-  PROCESSED="$(find "$LOCALAPPDATA/common-lisp" -path "*${SYS}*/grovel.processed-grovel-file" 2>/dev/null | xargs ls -t 2>/dev/null | head -1 || true)"
+  PROCESSED="$(find "$(msys_path "$LOCALAPPDATA/common-lisp")" -path "*${SYS}*/grovel.processed-grovel-file" 2>/dev/null | xargs ls -t 2>/dev/null | head -1 || true)"
 fi
 if [[ -z "$PROCESSED" || ! -f "$PROCESSED" ]]; then
   echo "could not locate grovel.processed-grovel-file; log:" >&2
