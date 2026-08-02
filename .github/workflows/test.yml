@@ -1,0 +1,103 @@
+name: Test
+
+on:
+  push:
+    branches: [main, "cursor/**"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+          - os: macos-latest
+          - os: windows-latest
+
+    runs-on: ${{ matrix.os }}
+    env:
+      LISP: sbcl-bin
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkout event-protocol
+        uses: actions/checkout@v4
+        with:
+          repository: egao1980/event-protocol
+          path: event-protocol
+
+      - name: Install libuv (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libuv1-dev build-essential
+
+      - name: Install libuv (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install libuv
+          echo "HOMEBREW_PREFIX=$(brew --prefix)" >> "$GITHUB_ENV"
+
+      - name: Install libuv + toolchain (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install cmake mingw -y
+          .\scripts\build-libuv.ps1
+          $inc = Get-ChildItem -Path build -Recurse -Directory -Filter include |
+            Where-Object { Test-Path (Join-Path $_.FullName "uv.h") } |
+            Select-Object -First 1 -ExpandProperty FullName
+          "EVENT_PROTOCOL_UV_INCLUDE=$inc" | Out-File -FilePath $env:GITHUB_ENV -Append
+          $lib = Resolve-Path "lib\windows-amd64"
+          "EVENT_PROTOCOL_NATIVE=$lib" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "Path=$lib;C:\ProgramData\mingw64\mingw64\bin;$env:Path" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Setup Common Lisp (Roswell)
+        uses: 40ants/setup-lisp@v4
+        with:
+          roswell-version: latest
+
+      - name: Install Quicklisp deps
+        shell: bash
+        run: |
+          ros install cffi
+          ros install rove
+
+      - name: Conformance × libuv
+        shell: bash
+        run: |
+          export HOMEBREW_PREFIX="${HOMEBREW_PREFIX:-/opt/homebrew}"
+          ros -e '(asdf:load-asd #p"event-protocol/event-protocol.asd")' \
+              -e '(asdf:load-asd #p"event-backend-libuv.asd")' \
+              -e '(asdf:test-system "event-backend-libuv")' \
+              -q
+
+  test-linux-image:
+    runs-on: ubuntu-latest
+    container:
+      image: fukamachi/sbcl:latest-ubuntu
+    steps:
+      - name: Install natives
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            libuv1-dev build-essential git ca-certificates
+          sbcl --non-interactive --eval '(ql:quickload (:cffi :rove) :silent t)' --quit
+
+      - uses: actions/checkout@v4
+
+      - name: Checkout event-protocol
+        uses: actions/checkout@v4
+        with:
+          repository: egao1980/event-protocol
+          path: event-protocol
+
+      - name: Test
+        run: |
+          sbcl --non-interactive \
+            --eval '(asdf:load-asd #p"event-protocol/event-protocol.asd")' \
+            --eval '(asdf:load-asd #p"event-backend-libuv.asd")' \
+            --eval '(asdf:test-system "event-backend-libuv")'

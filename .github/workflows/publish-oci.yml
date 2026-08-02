@@ -1,0 +1,135 @@
+name: Publish OCI Package
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Package version (default: from tag or 0.1.0)"
+        required: false
+        default: ""
+      registry:
+        description: "OCI registry"
+        required: false
+        default: "ghcr.io"
+
+env:
+  LIBUV_VERSION_DEFAULT: "1.51.0"
+  PACKAGE_VERSION_DEFAULT: "0.1.0"
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: linux
+            arch: amd64
+            runner: ubuntu-latest
+          - os: linux
+            arch: arm64
+            runner: ubuntu-24.04-arm
+          - os: darwin
+            arch: arm64
+            runner: macos-latest
+          - os: windows
+            arch: amd64
+            runner: windows-latest
+
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build deps (Linux)
+        if: matrix.os == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake curl
+
+      - name: Install build deps (macOS)
+        if: matrix.os == 'darwin'
+        run: brew install cmake || true
+
+      - name: Setup Common Lisp (Unix)
+        if: matrix.os != 'windows'
+        uses: 40ants/setup-lisp@v4
+        with:
+          roswell-version: latest
+
+      - name: Checkout event-protocol (for ASDF dep during grovel load)
+        uses: actions/checkout@v4
+        with:
+          repository: egao1980/event-protocol
+          path: event-protocol
+
+      - name: Build libuv (Unix)
+        if: matrix.os != 'windows'
+        env:
+          LIBUV_VERSION: ${{ env.LIBUV_VERSION_DEFAULT }}
+        run: |
+          chmod +x scripts/build-libuv.sh scripts/stage-grovel.sh
+          ./scripts/build-libuv.sh
+          export EVENT_PROTOCOL_UV_INCLUDE="$(echo build/libuv-*/prefix/include | awk '{print $1}')"
+          export HOMEBREW_PREFIX="${HOMEBREW_PREFIX:-/opt/homebrew}"
+          # stage-grovel loads the ASDF system — registry sibling tree
+          export CL_SOURCE_REGISTRY="$(pwd)/event-protocol//:$(pwd)//:"
+          ./scripts/stage-grovel.sh event-backend-libuv
+          mkdir -p native-bundle/lib native-bundle/grovel
+          cp -a "lib/${{ matrix.os }}-${{ matrix.arch }}/." native-bundle/lib/
+          cp -a "grovel/${{ matrix.os }}-${{ matrix.arch }}/." native-bundle/grovel/
+
+      - name: Build libuv (Windows)
+        if: matrix.os == 'windows'
+        shell: pwsh
+        env:
+          LIBUV_VERSION: ${{ env.LIBUV_VERSION_DEFAULT }}
+        run: |
+          choco install cmake mingw -y
+          .\scripts\build-libuv.ps1
+          # Grovel via Roswell when available; else skip cache staging in draft CI
+          New-Item -ItemType Directory -Force -Path native-bundle/lib, native-bundle/grovel | Out-Null
+          Copy-Item -Path "lib\${{ matrix.os }}-${{ matrix.arch }}\*" -Destination native-bundle/lib -Force
+
+      - name: Upload native+grovel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.os }}-${{ matrix.arch }}
+          path: native-bundle/
+
+  resolve-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+    steps:
+      - id: ver
+        shell: bash
+        run: |
+          V="${{ inputs.version }}"
+          if [ -z "$V" ] && [[ "${GITHUB_REF_NAME}" == v* ]]; then
+            V="${GITHUB_REF_NAME#v}"
+          fi
+          [ -z "$V" ] && V="${PACKAGE_VERSION_DEFAULT}"
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+
+  publish:
+    needs: [build, resolve-version]
+    permissions:
+      contents: read
+      packages: write
+    uses: egao1980/cl-repository/.github/workflows/publish-native-package.yml@main
+    with:
+      package-name: event-backend-libuv
+      version: ${{ needs.resolve-version.outputs.version }}
+      registry: ${{ inputs.registry || 'ghcr.io' }}
+      description: libuv backend + native/grovel overlays for event-protocol
+      license: MIT
+      depends-on: cffi event-protocol
+      provides: event-backend-libuv
+      cffi-libraries: libuv
+      source-paths: |
+        event-backend-libuv.asd
+        src
+        LICENSE
+        README.md
+    secrets: inherit
