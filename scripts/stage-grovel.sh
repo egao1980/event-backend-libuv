@@ -70,6 +70,20 @@ run_lisp() {
   fi
 }
 
+# Restore grovel-cache if a prior run was interrupted after hiding it.
+HIDDEN="$ROOT/.grovel-cache.staging-hidden"
+if [[ -d "$HIDDEN" ]]; then
+  if [[ -d "$HIDDEN/grovel-cache" ]]; then
+    rm -rf "$ROOT/grovel-cache"
+    mv "$HIDDEN/grovel-cache" "$ROOT/grovel-cache"
+    rm -rf "$HIDDEN"
+  elif [[ ! -d "$ROOT/grovel-cache" ]]; then
+    mv "$HIDDEN" "$ROOT/grovel-cache"
+  else
+    rm -rf "$HIDDEN"
+  fi
+fi
+
 # Hide grovel-cache so ASD runs grovel instead of reusing stale cached output.
 if [[ -d "$ROOT/grovel-cache" ]]; then
   mv "$ROOT/grovel-cache" "$ROOT/.grovel-cache.staging-hidden"
