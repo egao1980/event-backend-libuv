@@ -26,8 +26,23 @@
 
 (defun %abort-handle (ptr)
   (when (and (pointerp ptr) (not (null-pointer-p ptr)))
-    (%unregister ptr)
-    (%free-ptr ptr)))
+    (let ((entry (%lookup ptr)))
+      (if entry
+          (let* ((eh (getf (cdr entry) :event-handle))
+                 (loop (or (getf (cdr entry) :loop)
+                           (when eh (slot-value eh 'loop))))
+                 (loop-ptr (and loop (libuv-loop-ptr loop))))
+            (when eh
+              (setf (slot-value eh 'ptr) (null-pointer)))
+            (%close-handle ptr)
+            (when loop-ptr
+              (let ((addr (%addr ptr)))
+                (loop for i below 64
+                      while (gethash addr *uv-closing*)
+                      do (uv-run loop-ptr +uv-run-once+)))))
+          (progn
+            (%unregister ptr)
+            (%free-ptr ptr))))))
 
 (defclass libuv-backend (event-backend)
   ()
