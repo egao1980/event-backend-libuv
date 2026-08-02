@@ -25,14 +25,17 @@ DEST="$ROOT/grovel/${os}-${arch}"
 mkdir -p "$DEST"
 
 PROTO=""
-for cand in "$ROOT/event-protocol" "$ROOT/../event-protocol"; do
+for cand in \
+  "$ROOT/event-protocol" \
+  "$ROOT/../event-protocol" \
+  "$ROOT/.qlot/local-projects/event-protocol"; do
   if [[ -f "$cand/event-protocol.asd" ]]; then
     PROTO="$(cd "$cand" && pwd)"
     break
   fi
 done
 if [[ -z "$PROTO" ]]; then
-  echo "event-protocol.asd not found (expected ./event-protocol or ../event-protocol)" >&2
+  echo "event-protocol.asd not found (./event-protocol, ../event-protocol, or .qlot/local-projects/)" >&2
   exit 1
 fi
 
@@ -41,14 +44,15 @@ if [[ -z "${HOMEBREW_PREFIX}" && -d /opt/homebrew ]]; then
   export HOMEBREW_PREFIX=/opt/homebrew
 fi
 
-LISP=(sbcl --non-interactive)
-if command -v ros >/dev/null 2>&1; then
-  LISP=(ros -e)
-fi
-
-LOG="$(mktemp)"
+# Prefer qlot exec (cl-repository CI style) when a qlfile env is present.
 run_lisp() {
-  if [[ "${LISP[0]}" == "ros" ]]; then
+  if [[ -d "$ROOT/.qlot" ]] && command -v qlot >/dev/null 2>&1; then
+    qlot exec ros \
+      -e "(asdf:load-asd #p\"${PROTO}/event-protocol.asd\")" \
+      -e "(asdf:load-asd #p\"${ROOT}/${SYS}.asd\")" \
+      -e "(asdf:load-system \"${SYS}\")" \
+      -e '(format t "LOADED~%")' -q
+  elif command -v ros >/dev/null 2>&1; then
     ros -e "(asdf:load-asd #p\"${PROTO}/event-protocol.asd\")" \
         -e "(asdf:load-asd #p\"${ROOT}/${SYS}.asd\")" \
         -e "(asdf:load-system \"${SYS}\")" \
@@ -61,6 +65,8 @@ run_lisp() {
       --eval '(format t "LOADED~%")'
   fi
 }
+
+LOG="$(mktemp)"
 
 run_lisp >"$LOG" 2>&1 || { tail -80 "$LOG"; exit 1; }
 

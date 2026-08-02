@@ -6,6 +6,11 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Same Lisp bootstrap as egao1980/cl-repository (.github/workflows/test.yml):
+# Roswell install-for-ci → pinned sbcl-bin → qlot → qlot exec ros.
+env:
+  SBCL_VERSION: 2.4.11
+
 jobs:
   test:
     strategy:
@@ -17,23 +22,15 @@ jobs:
           - os: windows-latest
 
     runs-on: ${{ matrix.os }}
-    env:
-      LISP: sbcl-bin
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Checkout event-protocol
-        uses: actions/checkout@v4
-        with:
-          repository: egao1980/event-protocol
-          path: event-protocol
 
       - name: Install libuv (Linux)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libuv1-dev build-essential
+          sudo apt-get install -y libuv1-dev build-essential pkg-config
 
       - name: Install libuv (macOS)
         if: runner.os == 'macOS'
@@ -55,49 +52,26 @@ jobs:
           "EVENT_PROTOCOL_NATIVE=$lib" | Out-File -FilePath $env:GITHUB_ENV -Append
           "Path=$lib;C:\ProgramData\mingw64\mingw64\bin;$env:Path" | Out-File -FilePath $env:GITHUB_ENV -Append
 
-      - name: Setup Common Lisp (Roswell)
-        uses: 40ants/setup-lisp@v4
-        with:
-          roswell-version: latest
-
-      - name: Install Quicklisp deps
+      - name: Install Roswell
         shell: bash
         run: |
-          ros install cffi
-          ros install rove
+          curl -sL https://raw.githubusercontent.com/roswell/roswell/master/scripts/install-for-ci.sh | bash
+          echo "$HOME/.roswell/bin" >> "$GITHUB_PATH"
+
+      - name: Install SBCL
+        shell: bash
+        run: |
+          ros install "sbcl-bin/$SBCL_VERSION"
+          ros use "sbcl-bin/$SBCL_VERSION"
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          ros install qlot
+          qlot install
 
       - name: Conformance × libuv
         shell: bash
         run: |
           export HOMEBREW_PREFIX="${HOMEBREW_PREFIX:-/opt/homebrew}"
-          ros -e '(asdf:load-asd #p"event-protocol/event-protocol.asd")' \
-              -e '(asdf:load-asd #p"event-backend-libuv.asd")' \
-              -e '(asdf:test-system "event-backend-libuv")' \
-              -q
-
-  test-linux-image:
-    runs-on: ubuntu-latest
-    container:
-      image: fukamachi/sbcl:latest-ubuntu
-    steps:
-      - name: Install natives
-        run: |
-          apt-get update
-          apt-get install -y --no-install-recommends \
-            libuv1-dev build-essential git ca-certificates
-          sbcl --non-interactive --eval '(ql:quickload (:cffi :rove) :silent t)' --quit
-
-      - uses: actions/checkout@v4
-
-      - name: Checkout event-protocol
-        uses: actions/checkout@v4
-        with:
-          repository: egao1980/event-protocol
-          path: event-protocol
-
-      - name: Test
-        run: |
-          sbcl --non-interactive \
-            --eval '(asdf:load-asd #p"event-protocol/event-protocol.asd")' \
-            --eval '(asdf:load-asd #p"event-backend-libuv.asd")' \
-            --eval '(asdf:test-system "event-backend-libuv")'
+          qlot exec ros -e '(asdf:test-system "event-backend-libuv")'

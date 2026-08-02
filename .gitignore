@@ -5,3 +5,4 @@ grovel/
 .qlot/
 *~
 .DS_Store
+qlfile.lock

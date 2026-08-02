@@ -1,7 +1,9 @@
-;;; Guard for qlot/ASDF scanning — cffi-grovel may not be loaded yet.
-(eval-when (:compile-toplevel :load-toplevel :execute)
-  (unless (find-package "CFFI-GROVEL")
-    (defpackage "CFFI-GROVEL" (:export "GROVEL-FILE"))))
+;;; Stub for qlot READ of this .asd before cffi-grovel is installed (#. = read-time).
+#.(progn
+    (unless (find-package "CFFI-GROVEL")
+      (make-package "CFFI-GROVEL" :use '())
+      (export (intern "GROVEL-FILE" "CFFI-GROVEL") "CFFI-GROVEL"))
+    nil)
 
 (defsystem "event-backend-libuv"
   :version "0.1.0"

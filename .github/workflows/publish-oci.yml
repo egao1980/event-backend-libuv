@@ -17,6 +17,7 @@ on:
 env:
   LIBUV_VERSION_DEFAULT: "1.51.0"
   PACKAGE_VERSION_DEFAULT: "0.1.0"
+  SBCL_VERSION: 2.4.11
 
 jobs:
   build:
@@ -51,16 +52,23 @@ jobs:
         if: matrix.os == 'darwin'
         run: brew install cmake || true
 
-      - name: Setup Common Lisp
-        uses: 40ants/setup-lisp@v4
-        with:
-          roswell-version: latest
+      - name: Install Roswell
+        shell: bash
+        run: |
+          curl -sL https://raw.githubusercontent.com/roswell/roswell/master/scripts/install-for-ci.sh | bash
+          echo "$HOME/.roswell/bin" >> "$GITHUB_PATH"
 
-      - name: Checkout event-protocol (for ASDF dep during grovel load)
-        uses: actions/checkout@v4
-        with:
-          repository: egao1980/event-protocol
-          path: event-protocol
+      - name: Install SBCL
+        shell: bash
+        run: |
+          ros install "sbcl-bin/$SBCL_VERSION"
+          ros use "sbcl-bin/$SBCL_VERSION"
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          ros install qlot
+          qlot install
 
       - name: Build libuv (Unix)
         if: matrix.os != 'windows'
@@ -71,8 +79,6 @@ jobs:
           ./scripts/build-libuv.sh
           export EVENT_PROTOCOL_UV_INCLUDE="$(echo build/libuv-*/prefix/include | awk '{print $1}')"
           export HOMEBREW_PREFIX="${HOMEBREW_PREFIX:-/opt/homebrew}"
-          # stage-grovel loads the ASDF system — registry sibling tree
-          export CL_SOURCE_REGISTRY="$(pwd)/event-protocol//:$(pwd)//:"
           ./scripts/stage-grovel.sh event-backend-libuv
           mkdir -p native-bundle/lib native-bundle/grovel
           cp -a "lib/${{ matrix.os }}-${{ matrix.arch }}/." native-bundle/lib/
@@ -95,7 +101,6 @@ jobs:
         if: matrix.os == 'windows'
         shell: bash
         run: |
-          export CL_SOURCE_REGISTRY="$(pwd)/event-protocol//:$(pwd)//:"
           ./scripts/stage-grovel.sh event-backend-libuv
           mkdir -p native-bundle/lib native-bundle/grovel
           cp -a "lib/${{ matrix.os }}-${{ matrix.arch }}/." native-bundle/lib/
