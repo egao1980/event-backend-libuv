@@ -121,9 +121,9 @@ run_lisp >"$LOG" 2>&1 || { tail -80 "$LOG"; exit 1; }
 
 # Portable (macOS bash 3.2 has no mapfile). Also check Windows LOCALAPPDATA cache.
 CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/common-lisp"
-PROCESSED="$(find "$CACHE" -path "*${SYS}*/grovel.processed-grovel-file" 2>/dev/null | xargs ls -t 2>/dev/null | head -1 || true)"
+PROCESSED="$(find "$CACHE" -path "*${SYS}*/grovel.processed-grovel-file" -print0 2>/dev/null | xargs -0 ls -t 2>/dev/null | head -1 || true)"
 if [[ -z "$PROCESSED" || ! -f "$PROCESSED" ]] && [[ -n "${LOCALAPPDATA:-}" ]]; then
-  PROCESSED="$(find "$(msys_path "$LOCALAPPDATA/common-lisp")" -path "*${SYS}*/grovel.processed-grovel-file" 2>/dev/null | xargs ls -t 2>/dev/null | head -1 || true)"
+  PROCESSED="$(find "$(msys_path "$LOCALAPPDATA/common-lisp")" -path "*${SYS}*/grovel.processed-grovel-file" -print0 2>/dev/null | xargs -0 ls -t 2>/dev/null | head -1 || true)"
 fi
 if [[ -z "$PROCESSED" || ! -f "$PROCESSED" ]]; then
   echo "could not locate grovel.processed-grovel-file; log:" >&2
