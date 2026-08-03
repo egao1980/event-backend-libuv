@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Load package + grovel (runs cffi-grovel) and copy processed Lisp into grovel/<os>-<arch>/.
 # Usage: ./scripts/stage-grovel.sh event-backend-libuv
-# Expects event-protocol to be visible through CL_SOURCE_REGISTRY.
+# Loads event-protocol via cl-repository-client (OCI), not sibling checkout /
+# fragile CL_SOURCE_REGISTRY path discovery (Windows).
+# Expects .cl-repository/ checkout beside this repo (publish/test CI).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -62,7 +64,8 @@ LISP_ROOT="$(lisp_path "$ROOT")"
 
 # MSYS paths + ':' (same as test.yml). Do NOT use D:/... here — ':' is
 # ASDF's entry separator, so drive letters get split.
-export CL_SOURCE_REGISTRY="$(msys_path "$ROOT")//:${CL_SOURCE_REGISTRY:-}"
+# Prefer this checkout + cl-repository client; cl-repo registers its install tree.
+export CL_SOURCE_REGISTRY="$(msys_path "$ROOT")//:$(msys_path "$ROOT")/.cl-repository//:${CL_SOURCE_REGISTRY:-}"
 
 # Stage only package + grovel — ffi/backend are irrelevant for cffi-grovel-output.
 STAGE_LISP="$(mktemp "${TMPDIR:-/tmp}/stage-grovel.XXXXXX")"
@@ -74,9 +77,25 @@ cat >"$STAGE_LISP" <<EOF
         (declare (ignore h))
         (format *error-output* "~&UNHANDLED: ~A~%" c)
         (uiop:quit 1)))
+(setf asdf:*compile-file-failure-behaviour* :warn)
+(asdf:load-system "cl-repository-client")
+(cl-repo:add-registry "https://ghcr.io" :namespace "egao1980/cl-systems"
+                      :priority :prepend)
+;; event-protocol from OCI (newest tag) — do not rely on sibling / registry paths.
+(cl-repo:load-system "event-protocol")
+(unless (asdf:component-loaded-p "event-protocol")
+  (error "cl-repo: event-protocol did not load"))
+(handler-case
+    (cl-repo:load-system "cffi"
+                         :sources '(("babel" :ql)
+                                    ("trivial-features" :ql)
+                                    ("cl-unicode" :ql)))
+  (error ()
+    (ql:quickload "cffi" :silent t)))
+(unless (asdf:find-system "cffi-grovel" nil)
+  (ql:quickload "cffi-grovel" :silent t))
 (asdf:load-system "cffi-grovel")
 (asdf:load-asd #p"${LISP_ROOT}/${SYS}.asd")
-(asdf:load-system "event-protocol")
 (let* ((sys (asdf:find-system "${SYS}" nil))
        (pkg (and sys (asdf:find-component sys "package")))
        (grovel (and sys (or (asdf:find-component sys "grovel")
