@@ -1,4 +1,4 @@
-;;; Stub for qlot READ of this .asd before cffi-grovel is installed (#. = read-time).
+;;; Stub for reading this .asd before cffi-grovel is installed (#. = read-time).
 #.(progn
     (unless (find-package "CFFI-GROVEL")
       (make-package "CFFI-GROVEL" :use '())

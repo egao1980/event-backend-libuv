@@ -1,4 +1,3 @@
 ql cffi
 ql rove
-# Checked out by CI (and locally as sibling) — avoid qlot `github` (API rate + /tmp race).
-local event-protocol ./event-protocol
+# CI resolves event-protocol via cl-repository (ghcr.io/egao1980/cl-systems).

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Load package + grovel (runs cffi-grovel) and copy processed Lisp into grovel/<os>-<arch>/.
 # Usage: ./scripts/stage-grovel.sh event-backend-libuv
-# Looks for event-protocol at ./event-protocol/ or ../event-protocol/
+# Expects event-protocol to be visible through CL_SOURCE_REGISTRY.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -36,21 +36,6 @@ esac
 DEST="$ROOT/grovel/${os}-${arch}"
 mkdir -p "$DEST"
 
-PROTO=""
-for cand in \
-  "$ROOT/event-protocol" \
-  "$ROOT/../event-protocol" \
-  "$ROOT/.qlot/local-projects/event-protocol"; do
-  if [[ -f "$cand/event-protocol.asd" ]]; then
-    PROTO="$(cd "$cand" && pwd)"
-    break
-  fi
-done
-if [[ -z "$PROTO" ]]; then
-  echo "event-protocol.asd not found (./event-protocol, ../event-protocol, or .qlot/local-projects/)" >&2
-  exit 1
-fi
-
 export HOMEBREW_PREFIX="${HOMEBREW_PREFIX:-}"
 if [[ -z "${HOMEBREW_PREFIX}" && -d /opt/homebrew ]]; then
   export HOMEBREW_PREFIX=/opt/homebrew
@@ -74,11 +59,10 @@ msys_path() {
   fi
 }
 LISP_ROOT="$(lisp_path "$ROOT")"
-LISP_PROTO="$(lisp_path "$PROTO")"
 
 # MSYS paths + ':' (same as test.yml). Do NOT use D:/... here — ':' is
 # ASDF's entry separator, so drive letters get split.
-export CL_SOURCE_REGISTRY="$(msys_path "$PROTO")//:$(msys_path "$ROOT")//:${CL_SOURCE_REGISTRY:-}"
+export CL_SOURCE_REGISTRY="$(msys_path "$ROOT")//:${CL_SOURCE_REGISTRY:-}"
 
 # Stage only package + grovel — ffi/backend are irrelevant for cffi-grovel-output.
 STAGE_LISP="$(mktemp "${TMPDIR:-/tmp}/stage-grovel.XXXXXX")"
@@ -91,8 +75,6 @@ cat >"$STAGE_LISP" <<EOF
         (format *error-output* "~&UNHANDLED: ~A~%" c)
         (uiop:quit 1)))
 (asdf:load-system "cffi-grovel")
-;; Drive paths for load-asd (MSYS /d/... fails ASDF on Windows).
-(asdf:load-asd #p"${LISP_PROTO}/event-protocol.asd")
 (asdf:load-asd #p"${LISP_ROOT}/${SYS}.asd")
 (asdf:load-system "event-protocol")
 (let* ((sys (asdf:find-system "${SYS}" nil))
@@ -109,9 +91,7 @@ LISP_STAGE="$(lisp_path "$STAGE_LISP")"
 
 run_lisp() {
   local load_form="(load #p\"${LISP_STAGE}\")"
-  if [[ -d "$ROOT/.qlot" ]] && command -v qlot >/dev/null 2>&1; then
-    qlot exec ros -e "$load_form" -q
-  elif command -v ros >/dev/null 2>&1; then
+  if command -v ros >/dev/null 2>&1; then
     ros -e "$load_form" -q
   else
     sbcl --non-interactive --load "$LISP_STAGE"

@@ -19,6 +19,7 @@ env:
   PACKAGE_VERSION_DEFAULT: "0.1.0"
   SBCL_VERSION: 2.4.11
   ROSWELL_VERSION: "26.02.116"
+  CL_REPOSITORY_REF: "main"
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
@@ -44,12 +45,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Checkout event-protocol
+      - name: Checkout cl-repository
         uses: actions/checkout@v4
         with:
-          repository: egao1980/event-protocol
-          path: event-protocol
-          token: ${{ secrets.GITHUB_TOKEN }}
+          repository: egao1980/cl-repository
+          ref: ${{ env.CL_REPOSITORY_REF }}
+          path: .cl-repository
 
       - name: Install build deps (Linux)
         if: matrix.os == 'linux'
@@ -87,19 +88,17 @@ jobs:
           ros install "sbcl-bin/$SBCL_VERSION"
           ros use "sbcl-bin/$SBCL_VERSION"
 
-      - name: Install dependencies (Unix)
-        if: matrix.os != 'windows'
+      - name: Bootstrap cl-repository-client (QL deps for client only)
         shell: bash
         run: |
-          ros install qlot
-          qlot install
+          ros -e '(ql:quickload (quote ("yason" "ironclad" "babel" "dexador" "quri" "chipz" "flexi-streams" "cl-ppcre" "cl-base64" "trivial-features" "salza2" "archive")) :silent t)' -q
 
-      - name: Install dependencies (Windows)
-        if: matrix.os == 'windows'
+      - name: Pull Lisp deps with cl-repository
         shell: bash
         run: |
-          ros install cffi
-          ros install rove
+          export CL_SOURCE_REGISTRY="$(pwd)//:$(pwd)/.cl-repository//:"
+          CI_INSTALL_DEPS_ONLY=1 ros -l scripts/ci-test.lisp -q
+          echo "CL_SOURCE_REGISTRY=$(pwd)//:$(pwd)/.cl-repository//:$HOME/.local/share/cl-repository/systems//:" >> "$GITHUB_ENV"
 
       - name: Build libuv (Unix)
         if: matrix.os != 'windows'
