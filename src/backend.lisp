@@ -235,9 +235,12 @@
   (call-next-method)
   (let ((ptr (libuv-handle-ptr handle)))
     ;; Idempotent: timer/idle callbacks already uv_close + free the handle.
-    (let ((entry (%lookup ptr)))
-      (when (and (pointerp ptr) (not (null-pointer-p ptr))
-                 entry (eq handle (getf (cdr entry) :event-handle)))
+    ;; Never uv_*_stop a handle already in uv_close — libuv asserts
+    ;; (uv_poll_stop: !uv__is_closing) which abort()s past ignore-errors.
+    (let ((entry (%lookup ptr))
+          (addr (and (pointerp ptr) (not (null-pointer-p ptr)) (%addr ptr))))
+      (when (and addr entry (eq handle (getf (cdr entry) :event-handle))
+                 (not (gethash addr *uv-closing*)))
         (case (libuv-handle-kind handle)
           (:timer (ignore-errors (uv-timer-stop ptr)))
           (:idle (ignore-errors (uv-idle-stop ptr)))
