@@ -44,9 +44,9 @@ jobs:
 
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: oras-project/setup-oras@v1
+      - uses: oras-project/setup-oras@v2
         with:
           version: 1.2.3
 
@@ -163,7 +163,7 @@ jobs:
           cp -a "grovel/${{ matrix.os }}-${{ matrix.arch }}/." native-bundle/grovel/
 
       - name: Upload native+grovel artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: native-${{ matrix.os }}-${{ matrix.arch }}
           path: native-bundle/
