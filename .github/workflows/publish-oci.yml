@@ -19,7 +19,8 @@ env:
   PACKAGE_VERSION_DEFAULT: "0.1.1"
   SBCL_VERSION: 2.4.11
   ROSWELL_VERSION: "26.02.116"
-  CL_REPOSITORY_REF: "main"
+  CL_REPOSITORY_CLIENT_IMAGE: "ghcr.io/egao1980/cl-repository/cl-repository-client"
+  CL_REPOSITORY_CLIENT_VERSION: "0.10.0"
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
@@ -45,12 +46,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Checkout cl-repository
-        uses: actions/checkout@v4
+      - uses: oras-project/setup-oras@v1
         with:
-          repository: egao1980/cl-repository
-          ref: ${{ env.CL_REPOSITORY_REF }}
-          path: .cl-repository
+          version: 1.2.3
+
+      - name: Pull cl-repository-client (OCI)
+        shell: bash
+        run: |
+          echo "${GITHUB_TOKEN}" | oras login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
+          rm -rf /tmp/cl-repo-pull .cl-repository
+          mkdir -p /tmp/cl-repo-pull .cl-repository
+          oras pull "${CL_REPOSITORY_CLIENT_IMAGE}:${CL_REPOSITORY_CLIENT_VERSION}" -o /tmp/cl-repo-pull
+          for f in /tmp/cl-repo-pull/*.tar.gz; do
+            tar -xzf "$f" -C .cl-repository
+          done
+          CLIENT_DIR="$(find .cl-repository -maxdepth 1 -type d -name 'cl-oci-*' | head -1)"
+          : "${CLIENT_DIR:?cl-oci-* not found after oras pull}"
+          echo "CL_REPOSITORY_CLIENT_DIR=${CLIENT_DIR}" >> "$GITHUB_ENV"
 
       - name: Install build deps (Linux)
         if: matrix.os == 'linux'
@@ -96,9 +108,9 @@ jobs:
       - name: Pull Lisp deps with cl-repository
         shell: bash
         run: |
-          export CL_SOURCE_REGISTRY="$(pwd)//:$(pwd)/.cl-repository//:"
+          export CL_SOURCE_REGISTRY="$(pwd)//:$(pwd)/${CL_REPOSITORY_CLIENT_DIR}//:"
           CI_INSTALL_DEPS_ONLY=1 ros -l scripts/ci-test.lisp -q
-          echo "CL_SOURCE_REGISTRY=$(pwd)//:$(pwd)/.cl-repository//:$HOME/.local/share/cl-repository/systems//:" >> "$GITHUB_ENV"
+          echo "CL_SOURCE_REGISTRY=$(pwd)//:$(pwd)/${CL_REPOSITORY_CLIENT_DIR}//:$HOME/.local/share/cl-repository/systems//:" >> "$GITHUB_ENV"
 
       - name: Build libuv (Unix)
         if: matrix.os != 'windows'
@@ -176,16 +188,13 @@ jobs:
     permissions:
       contents: read
       packages: write
+      packages: read
     uses: egao1980/cl-repository/.github/workflows/publish-native-package.yml@main
     with:
       package-name: event-backend-libuv
       version: ${{ needs.resolve-version.outputs.version }}
       registry: ${{ inputs.registry || 'ghcr.io' }}
-      description: libuv backend + native/grovel overlays for event-protocol
-      license: MIT
-      depends-on: cffi event-protocol
-      provides: event-backend-libuv
-      cffi-libraries: libuv
+      packager-tag: "0.10.0"
       source-paths: |
         event-backend-libuv.asd
         src
