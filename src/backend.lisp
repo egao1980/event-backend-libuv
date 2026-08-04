@@ -249,14 +249,21 @@
   handle)
 
 
+(defun %uv-poll-events (direction)
+  (ecase direction
+    (:none 0)
+    (:read +uv-readable+)
+    (:write +uv-writable+)
+    (:read-write (logior +uv-readable+ +uv-writable+))))
+
 (defmethod register-io ((backend libuv-backend) (loop libuv-loop) fd direction callback &key)
   (%assert-loop-open loop)
+  (when (eq direction :none)
+    (error 'event-io-error
+           :message "register-io DIRECTION cannot be :none (use update-io)"))
   (let* ((ptr (foreign-alloc :uint8 :count (uv-handle-size +uv-poll+)))
          (eh (make-instance 'libuv-handle :loop loop :ptr ptr :kind :poll))
-         (events (ecase direction
-                   (:read +uv-readable+)
-                   (:write +uv-writable+)
-                   (:read-write (logior +uv-readable+ +uv-writable+))))
+         (events (%uv-poll-events direction))
          (done nil))
     (unwind-protect
          (progn
@@ -267,6 +274,30 @@
            eh)
       (unless done
         (%abort-handle ptr)))))
+
+(defmethod update-io ((backend libuv-backend) (handle libuv-handle) direction
+                      &key (callback nil callbackp))
+  "Change poll interest in place — never uv_close / re-init (avoids UV_EEXIST)."
+  (unless (eq (libuv-handle-kind handle) :poll)
+    (error 'event-io-error :message "update-io requires a poll handle"
+           :handle handle))
+  (when (event-handle-canceled-p handle)
+    (error 'event-canceled :handle handle :message "update-io on canceled handle"))
+  (let* ((ptr (libuv-handle-ptr handle))
+         (entry (%lookup ptr))
+         (events (%uv-poll-events direction)))
+    (unless (and (pointerp ptr) (not (null-pointer-p ptr)) entry)
+      (error 'event-io-error :message "update-io: poll handle not registered"
+             :handle handle))
+    (when (gethash (%addr ptr) *uv-closing*)
+      (error 'event-io-error :message "update-io: poll handle is closing"
+             :handle handle))
+    (when callbackp
+      (setf (getf (cdr entry) :fn) callback))
+    (if (zerop events)
+        (%check (uv-poll-stop ptr) "uv_poll_stop")
+        (%check (uv-poll-start ptr events (callback %uv-poll-cb)) "uv_poll_start"))
+    handle))
 
 (defmethod wake ((backend libuv-backend) (loop libuv-loop))
   (%assert-loop-open loop)
