@@ -64,10 +64,12 @@ jobs:
           sbcl-version: ${{ env.SBCL_VERSION }}
           roswell-version: ${{ env.ROSWELL_VERSION }}
 
-      - name: Install Lisp deps
+      - uses: egao1980/cl-repository/.github/actions/ci@main
+        with:
+          phase: install
+      - name: ASDF registry for grovel
         shell: bash
         run: |
-          ros -l scripts/ci-install.lisp -q
           echo "CL_SOURCE_REGISTRY=$(pwd)//:$(pwd)/${CL_REPOSITORY_CLIENT_DIR}//:$HOME/.local/share/cl-repository/systems//:" >> "$GITHUB_ENV"
 
       - name: Build libuv (Unix)
