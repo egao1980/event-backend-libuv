@@ -67,6 +67,7 @@ jobs:
       - uses: egao1980/cl-repository/.github/actions/ci@main
         with:
           phase: install
+          system: event-backend-libuv
       - name: ASDF registry for grovel
         shell: bash
         run: |

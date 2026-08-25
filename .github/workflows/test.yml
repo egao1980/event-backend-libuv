@@ -82,7 +82,9 @@ jobs:
       - uses: egao1980/cl-repository/.github/actions/ci@main
         with:
           phase: install
+          system: event-backend-libuv
 
       - uses: egao1980/cl-repository/.github/actions/ci@main
         with:
           phase: test
+          system: event-backend-libuv
