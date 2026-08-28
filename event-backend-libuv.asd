@@ -6,12 +6,12 @@
     nil)
 
 (defsystem "event-backend-libuv"
-  :version "0.1.1"
+  :version "0.1.2"
   :description "libuv backend for event-protocol (default; Windows/linux/darwin)"
   :author "egao1980"
   :license "MIT"
   :defsystem-depends-on ("cffi-grovel")
-  :depends-on ("cffi" "event-protocol")
+  :depends-on ("cffi" "event-protocol" "cl-stack-executors")
   :serial t
   :pathname "src"
   ;; Prefer overlay grovel-cache/ (no CC). Local-dev falls back to grovel-file.
@@ -23,11 +23,13 @@
           '((:file "package")
             (:file "grovel-cached" :pathname "../grovel-cache/grovel.cffi")
             (:file "ffi")
-            (:file "backend"))
+            (:file "backend")
+            (:file "submit"))
           '((:file "package")
             (cffi-grovel:grovel-file "grovel")
             (:file "ffi")
-            (:file "backend"))))
+            (:file "backend")
+            (:file "submit"))))
   :in-order-to ((test-op (test-op "event-backend-libuv/tests")))
   :properties
   (:cl-repo

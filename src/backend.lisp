@@ -83,11 +83,25 @@
   ((ptr :initarg :ptr :reader libuv-loop-ptr)
    (async :initarg :async :reader libuv-loop-async)
    (wake-queue :initform nil :accessor libuv-loop-wake-queue)
-   (closed :initform nil :accessor libuv-loop-closed-p)))
+   (closed :initform nil :accessor libuv-loop-closed-p)
+   (submit-pool :initform nil :accessor libuv-loop-submit-pool)))
 
 (defclass libuv-handle (event-handle)
   ((ptr :initarg :ptr :reader libuv-handle-ptr)
    (kind :initarg :kind :reader libuv-handle-kind)))
+
+(defun %ensure-submit-pool (loop)
+  (or (libuv-loop-submit-pool loop)
+      (setf (libuv-loop-submit-pool loop)
+            (make-thread-pool
+             :name (format nil "event-submit-~A"
+                           (backend-name (event-loop-backend loop)))))))
+
+(defun %shutdown-submit-pool (loop)
+  (let ((pool (libuv-loop-submit-pool loop)))
+    (when pool
+      (executor-shutdown pool :wait t)
+      (setf (libuv-loop-submit-pool loop) nil))))
 
 (defcallback %uv-close-cb :void ((handle :pointer))
   (let ((entry (%lookup handle)))
@@ -304,14 +318,16 @@
   (%check (uv-async-send (libuv-loop-async loop)) "uv_async_send")
   loop)
 
-(defun wake-call (loop function)
-  "Enqueue FUNCTION on LOOP and wake it (safe from other threads on SBCL)."
+(defmethod wake-call ((backend libuv-backend) (loop libuv-loop) function)
+  "Enqueue FUNCTION on LOOP and wake it (thread-safe)."
+  (%assert-loop-open loop)
   (%push-wake-queue loop function)
-  (wake (event-loop-backend loop) loop)
+  (wake backend loop)
   loop)
 
 (defun close-loop (loop)
   "Close async + loop after RUN has returned (drain pending uv_close)."
+  (%shutdown-submit-pool loop)
   (unless (libuv-loop-closed-p loop)
     (let ((async (libuv-loop-async loop))
           (ptr (libuv-loop-ptr loop)))
