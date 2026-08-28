@@ -62,10 +62,15 @@ msys_path() {
 }
 LISP_ROOT="$(lisp_path "$ROOT")"
 
-# MSYS paths + ':' (same as test.yml). Do NOT use D:/... here — ':' is
-# ASDF's entry separator, so drive letters get split.
+# ASDF on Windows splits CL_SOURCE_REGISTRY on ';' (':' splits D:).
+# Always rebuild on Windows — inherited GITHUB_ENV may be colon-joined
+# msys+D: paths that ASDF treats as one dead entry.
 # Prefer this checkout + cl-repository client; cl-repo registers its install tree.
-export CL_SOURCE_REGISTRY="$(msys_path "$ROOT")//:$(msys_path "$ROOT")/.cl-repository//:${CL_SOURCE_REGISTRY:-}"
+if command -v cygpath >/dev/null 2>&1; then
+  export CL_SOURCE_REGISTRY="$(lisp_path "$ROOT")//;$(lisp_path "$ROOT")/.cl-repository//;"
+else
+  export CL_SOURCE_REGISTRY="$(msys_path "$ROOT")//:$(msys_path "$ROOT")/.cl-repository//:${CL_SOURCE_REGISTRY:-}"
+fi
 
 # Stage only package + grovel — ffi/backend are irrelevant for cffi-grovel-output.
 STAGE_LISP="$(mktemp "${TMPDIR:-/tmp}/stage-grovel.XXXXXX")"

@@ -16,7 +16,7 @@ on:
 
 env:
   LIBUV_VERSION_DEFAULT: "1.51.0"
-  PACKAGE_VERSION_DEFAULT: "0.1.1"
+  PACKAGE_VERSION_DEFAULT: "0.1.2"
   SBCL_VERSION: 2.6.7
   ROSWELL_VERSION: "26.02.116"
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -71,7 +71,21 @@ jobs:
       - name: ASDF registry for grovel
         shell: bash
         run: |
-          echo "CL_SOURCE_REGISTRY=$(pwd)//:$(pwd)/${CL_REPOSITORY_CLIENT_DIR}//:$HOME/.local/share/cl-repository/systems//:" >> "$GITHUB_ENV"
+          root="$(pwd)"
+          client="${CL_REPOSITORY_CLIENT_DIR:-.cl-repository}"
+          if command -v cygpath >/dev/null 2>&1; then
+            case "$client" in
+              [A-Za-z]:*|/*) ;;
+              *) client="${root}/${client}" ;;
+            esac
+            echo "CL_SOURCE_REGISTRY=$(cygpath -m "$root")//;$(cygpath -m "$client")//;" >> "$GITHUB_ENV"
+          else
+            case "$client" in
+              /*) ;;
+              *) client="${root}/${client}" ;;
+            esac
+            echo "CL_SOURCE_REGISTRY=${root}//:${client}//:${HOME}/.local/share/cl-repository/systems//:" >> "$GITHUB_ENV"
+          fi
 
       - name: Build libuv (Unix)
         if: matrix.os != 'windows'
