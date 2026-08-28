@@ -1,5 +1,9 @@
 (defpackage #:event-backend-libuv
   (:use #:cl #:cffi #:event-protocol)
+  (:import-from #:cl-stack-executors
+                #:make-thread-pool
+                #:executor-runner
+                #:executor-shutdown)
   (:export #:libuv-backend
            #:make-libuv-backend
            #:load-libuv

@@ -20,6 +20,8 @@ ros -e '(asdf:load-asd "event-backend-libuv.asd")' \
 
 Conformance suite is shared (`event-protocol/conformance`); this repo sets the backend maker.
 
+`submit` with no `:executor` uses a per-loop [`cl-stack-executors`](https://github.com/egao1980/cl-stack-executors) thread pool (not `uv_queue_work`). Pass a function of one thunk to override.
+
 ## Overlay
 
 ```bash
