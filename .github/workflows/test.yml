@@ -33,8 +33,6 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - uses: egao1980/cl-repository/.github/actions/setup-client@main
-
       - name: Install libuv (Linux)
         if: runner.os == 'Linux'
         run: |
@@ -74,7 +72,7 @@ jobs:
           "Path=$mingw;$env:Path" | Out-File -FilePath $env:GITHUB_ENV -Append
           & "$mingw\gcc.exe" --version | Select-Object -First 1
 
-      - uses: egao1980/cl-repository/.github/actions/setup-roswell@main
+      - uses: egao1980/cl-repository/.github/actions/setup-lisp@main
         with:
           sbcl-version: ${{ env.SBCL_VERSION }}
           roswell-version: ${{ env.ROSWELL_VERSION }}
