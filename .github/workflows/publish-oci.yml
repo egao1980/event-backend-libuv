@@ -166,7 +166,6 @@ jobs:
       package-name: event-backend-libuv
       version: ${{ needs.resolve-version.outputs.version }}
       registry: ${{ inputs.registry || 'ghcr.io' }}
-      packager-tag: "0.10.0"
       source-paths: |
         event-backend-libuv.asd
         src
