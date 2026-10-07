@@ -16,7 +16,6 @@ on:
 
 env:
   LIBUV_VERSION_DEFAULT: "1.51.0"
-  PACKAGE_VERSION_DEFAULT: "0.1.2"
   SBCL_VERSION: 2.6.7
   ROSWELL_VERSION: "26.02.116"
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -146,14 +145,20 @@ jobs:
     outputs:
       version: ${{ steps.ver.outputs.version }}
     steps:
+      - uses: actions/checkout@v5
       - id: ver
         shell: bash
+        # input > vX.Y.Z tag > .asd :version (never a hardcoded default: a
+        # plain dispatch once re-tagged 0.1.2 with 0.1.3 sources).
         run: |
           V="${{ inputs.version }}"
           if [ -z "$V" ] && [[ "${GITHUB_REF_NAME}" == v* ]]; then
             V="${GITHUB_REF_NAME#v}"
           fi
-          [ -z "$V" ] && V="${PACKAGE_VERSION_DEFAULT}"
+          if [ -z "$V" ]; then
+            V="$(sed -nE 's/^[[:space:]]*:version[[:space:]]+"([^"]+)".*/\1/p' event-backend-libuv.asd | head -1)"
+          fi
+          [ -n "$V" ] || { echo "could not resolve package version" >&2; exit 1; }
           echo "version=$V" >> "$GITHUB_OUTPUT"
 
   publish:
