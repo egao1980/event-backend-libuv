@@ -113,12 +113,17 @@
   (%unregister handle)
   (foreign-free handle))
 
+(defun %cb (name)
+  "Resolve a defcallback at call time. SBCL can lift (callback X) to
+   load-time-value, which blows up FASL load with Undefined callback."
+  (cffi-sys:%callback name))
+
 (defun %close-handle (ptr)
   (when (and (pointerp ptr) (not (null-pointer-p ptr)))
     (let ((addr (%addr ptr)))
       (unless (gethash addr *uv-closing*)
         (setf (gethash addr *uv-closing*) t)
-        (uv-close ptr (callback %uv-close-cb))))))
+        (uv-close ptr (%cb '%uv-close-cb))))))
 
 (defcallback %uv-timer-cb :void ((handle :pointer))
   (let ((entry (%lookup handle)))
@@ -183,7 +188,7 @@
                                       :backend backend
                                       :ptr loop-ptr
                                       :async async-ptr)))
-             (%check (uv-async-init loop-ptr async-ptr (callback %uv-async-cb))
+             (%check (uv-async-init loop-ptr async-ptr (%cb '%uv-async-cb))
                      "uv_async_init")
              (uv-unref async-ptr)
              (%register async-ptr :async (list :loop loop))
@@ -222,7 +227,7 @@
          (progn
            (%check (uv-idle-init (libuv-loop-ptr loop) ptr) "uv_idle_init")
            (%register ptr :idle (list :fn function :event-handle eh))
-           (%check (uv-idle-start ptr (callback %uv-idle-cb)) "uv_idle_start")
+           (%check (uv-idle-start ptr (%cb '%uv-idle-cb)) "uv_idle_start")
            (setf done t)
            eh)
       (unless done
@@ -239,7 +244,7 @@
          (progn
            (%check (uv-timer-init (libuv-loop-ptr loop) ptr) "uv_timer_init")
            (%register ptr :timer (list :fn fn :event-handle eh))
-           (%check (uv-timer-start ptr (callback %uv-timer-cb) ms 0) "uv_timer_start")
+           (%check (uv-timer-start ptr (%cb '%uv-timer-cb) ms 0) "uv_timer_start")
            (setf done t)
            eh)
       (unless done
@@ -283,7 +288,7 @@
          (progn
            (%check (uv-poll-init-fd (libuv-loop-ptr loop) ptr fd) "uv_poll_init")
            (%register ptr :poll (list :fn callback :event-handle eh))
-           (%check (uv-poll-start ptr events (callback %uv-poll-cb)) "uv_poll_start")
+           (%check (uv-poll-start ptr events (%cb '%uv-poll-cb)) "uv_poll_start")
            (setf done t)
            eh)
       (unless done
@@ -310,7 +315,7 @@
       (setf (getf (cdr entry) :fn) callback))
     (if (zerop events)
         (%check (uv-poll-stop ptr) "uv_poll_stop")
-        (%check (uv-poll-start ptr events (callback %uv-poll-cb)) "uv_poll_start"))
+        (%check (uv-poll-start ptr events (%cb '%uv-poll-cb)) "uv_poll_start"))
     handle))
 
 (defmethod wake ((backend libuv-backend) (loop libuv-loop))
