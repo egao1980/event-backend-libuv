@@ -15,7 +15,7 @@ on:
         default: "ghcr.io"
 
 env:
-  LIBUV_VERSION_DEFAULT: "1.51.0"
+  LIBUV_VERSION_DEFAULT: "1.53.0"
   SBCL_VERSION: 2.6.7
   ROSWELL_VERSION: "26.02.116"
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

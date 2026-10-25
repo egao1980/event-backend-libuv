@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Build shared libuv into lib/<os>-<arch>/.
-# Env: LIBUV_VERSION (default 1.51.0), DEST_DIR, EVENT_PROTOCOL_UV_INCLUDE (set for grovel)
+# Env: LIBUV_VERSION (default 1.53.0), DEST_DIR, EVENT_PROTOCOL_UV_INCLUDE (set for grovel)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-LIBUV_VERSION="${LIBUV_VERSION:-1.51.0}"
+LIBUV_VERSION="${LIBUV_VERSION:-1.53.0}"
 JOBS="$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)"
 
 uname_s="$(uname -s)"

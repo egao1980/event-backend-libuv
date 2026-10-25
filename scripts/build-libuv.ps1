@@ -1,9 +1,9 @@
 # Build shared libuv into lib/windows-amd64/ with MSVC (VsDevCmd + NMake).
 # Do not use MinGW here — MinGW gcc is only for cffi-grovel against the same headers.
-# Env: LIBUV_VERSION (default 1.51.0)
+# Env: LIBUV_VERSION (default 1.53.0)
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
-$Version = if ($env:LIBUV_VERSION) { $env:LIBUV_VERSION } else { "1.51.0" }
+$Version = if ($env:LIBUV_VERSION) { $env:LIBUV_VERSION } else { "1.53.0" }
 $Out = Join-Path $Root "lib\windows-amd64"
 $Build = Join-Path $Root "build\libuv-$Version-windows-amd64"
 $Tgz = Join-Path $Root "build\libuv-$Version.tar.gz"
