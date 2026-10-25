@@ -1,3 +1,0 @@
-ql cffi
-ql rove
-# CI resolves event-protocol via cl-repository (ghcr.io/egao1980/cl-systems).
