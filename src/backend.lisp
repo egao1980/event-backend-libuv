@@ -76,7 +76,6 @@
   (:default-initargs :name "libuv"))
 
 (defun make-libuv-backend ()
-  (load-libuv)
   (make-instance 'libuv-backend))
 
 (defclass libuv-loop (event-loop)
@@ -175,7 +174,6 @@
             (error (e) (warn "poll callback error: ~A" e))))))))
 
 (defmethod make-event-loop ((backend libuv-backend) &key)
-  (load-libuv)
   (let* ((loop-ptr (foreign-alloc :uint8 :count (uv-loop-size)))
          (async-ptr (foreign-alloc :uint8 :count (uv-handle-size +uv-async+)))
          (loop-inited nil)
