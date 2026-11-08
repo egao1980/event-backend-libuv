@@ -6,7 +6,6 @@
                 #:executor-shutdown)
   (:export #:libuv-backend
            #:make-libuv-backend
-           #:load-libuv
            #:wake-call
            #:close-loop
            #:libuv-loop

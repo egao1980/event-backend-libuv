@@ -13,47 +13,7 @@
 (defparameter +uv-poll+ (foreign-enum-value 'uv-handle-type :poll))
 (defparameter +uv-timer+ (foreign-enum-value 'uv-handle-type :timer))
 
-(define-foreign-library libuv
-  (:darwin (:or "libuv.1.dylib" "libuv.dylib"
-                "/opt/homebrew/lib/libuv.dylib"
-                "/usr/local/lib/libuv.dylib"))
-  (:unix (:or "libuv.so.1" "libuv.so"))
-  (:windows (:or "libuv.dll" "libuv-1.dll"))
-  (t (:default "libuv")))
-
-(defun %native-search-dirs ()
-  (let ((dirs '()))
-    (dolist (var '("EVENT_PROTOCOL_NATIVE" "CL_STACK_LIBUV_NATIVE"))
-      (let ((v (uiop:getenv var)))
-        (when (and v (plusp (length v)))
-          (push v dirs))))
-    (ignore-errors
-      (let* ((sys (asdf:find-system :event-backend-libuv nil))
-             (root (when sys (asdf:system-source-directory sys))))
-        (when root
-          (push (namestring (merge-pathnames "native/" root)) dirs)
-          (push (namestring
-                 (merge-pathnames
-                  (format nil "lib/~A-~A/"
-                          #+windows "windows"
-                          #+darwin "darwin"
-                          #+linux "linux"
-                          #-(or windows darwin linux) "unknown"
-                          #+(or x86-64 x64) "amd64"
-                          #+(or arm64 aarch64) "arm64"
-                          #-(or x86-64 x64 arm64 aarch64) "unknown")
-                  root))
-                dirs))))
-    (nreverse dirs)))
-
-(defun load-libuv ()
-  "Load libuv, preferring overlay/native dirs then system paths."
-  (dolist (dir (%native-search-dirs))
-    (when (and dir (uiop:directory-exists-p dir))
-      (pushnew dir cffi:*foreign-library-directories* :test #'equal)))
-  (unless (foreign-library-loaded-p 'libuv)
-    (load-foreign-library 'libuv))
-  t)
+; libuv itself is loaded at ASDF load by the (:native-library "uv") component.
 
 (defcfun ("uv_loop_size" uv-loop-size) :unsigned-long)
 (defcfun ("uv_handle_size" uv-handle-size) :unsigned-long (type :int))
