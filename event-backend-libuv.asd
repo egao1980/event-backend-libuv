@@ -6,7 +6,7 @@
     nil)
 
 (defsystem "event-backend-libuv"
-  :version "0.2.0"
+  :version "0.2.1"
   :description "libuv backend for event-protocol (default; Windows/linux/darwin)"
   :author "egao1980"
   :license "MIT"
@@ -35,35 +35,24 @@
             (:file "backend")
             (:file "submit"))))
   :in-order-to ((test-op (test-op "event-backend-libuv/tests")))
+  ;; Native-library overlays: lib/<os>-<arch>/ per platform, derived from the
+  ;; :native-library components. The grovel output folds into the same platform.
   :properties
   (:cl-repo
-   (:cffi-libraries ("libuv")
-    :provides ("event-backend-libuv")
+   (:provides ("event-backend-libuv")
     :overlays
     ((:platform (:os "linux" :arch "amd64")
-      :layers ((:role "native-library"
-                :files (("lib/linux-amd64/libuv.so" . "libuv.so")
-                        ("lib/linux-amd64/libuv.so.1" . "libuv.so.1")))
-               (:role "cffi-grovel-output"
+      :layers ((:role "cffi-grovel-output"
                 :files (("grovel/linux-amd64/grovel.cffi.lisp" . "grovel.cffi.lisp")))))
      (:platform (:os "linux" :arch "arm64")
-      :layers ((:role "native-library"
-                :files (("lib/linux-arm64/libuv.so" . "libuv.so")
-                        ("lib/linux-arm64/libuv.so.1" . "libuv.so.1")))
-               (:role "cffi-grovel-output"
+      :layers ((:role "cffi-grovel-output"
                 :files (("grovel/linux-arm64/grovel.cffi.lisp" . "grovel.cffi.lisp")))))
      (:platform (:os "darwin" :arch "arm64")
-      :layers ((:role "native-library"
-                :files (("lib/darwin-arm64/libuv.dylib" . "libuv.dylib")
-                        ("lib/darwin-arm64/libuv.1.dylib" . "libuv.1.dylib")))
-               (:role "cffi-grovel-output"
+      :layers ((:role "cffi-grovel-output"
                 :files (("grovel/darwin-arm64/grovel.cffi.lisp" . "grovel.cffi.lisp")))))
      (:platform (:os "windows" :arch "amd64")
-      :layers ((:role "native-library"
-                :files (("lib/windows-amd64/libuv.dll" . "libuv.dll")))
-               (:role "cffi-grovel-output"
-                :files (("grovel/windows-amd64/grovel.cffi.lisp"
-                         . "grovel.cffi.lisp")))))))))
+      :layers ((:role "cffi-grovel-output"
+                :files (("grovel/windows-amd64/grovel.cffi.lisp" . "grovel.cffi.lisp")))))))))
 
 (defsystem "event-backend-libuv/tests"
   :depends-on ("event-backend-libuv" "event-protocol/conformance" "rove")
