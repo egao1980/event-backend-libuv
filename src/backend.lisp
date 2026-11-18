@@ -328,23 +328,44 @@
   (wake backend loop)
   loop)
 
+(defun %loop-event-handles (loop)
+  "EVENT-HANDLEs (timer / idle / poll) still registered on LOOP."
+  (let ((handles '()))
+    (maphash (lambda (addr entry)
+               (declare (ignore addr))
+               (let ((eh (getf (cdr entry) :event-handle)))
+                 (when (and eh (eq (event-handle-loop eh) loop))
+                   (push eh handles))))
+             *uv-callbacks*)
+    handles))
+
 (defun close-loop (loop)
-  "Close async + loop after RUN has returned (drain pending uv_close)."
+  "Release LOOP after RUN has returned: cancel its pending timer / idle / poll
+   handles (their callbacks do not run), close the wake handle, drain the
+   uv_close callbacks and uv_loop_close it, which frees the kqueue / epoll
+   descriptor. Idempotent."
   (%shutdown-submit-pool loop)
   (unless (libuv-loop-closed-p loop)
-    (let ((async (libuv-loop-async loop))
+    (let ((backend (event-loop-backend loop))
+          (async (libuv-loop-async loop))
           (ptr (libuv-loop-ptr loop)))
+      (dolist (eh (%loop-event-handles loop))
+        (ignore-errors (cancel backend eh)))
       (ignore-errors (%close-handle async))
-      ;; uv_close is async — run until uv_loop_close succeeds (or give up).
+      ;; uv_close is async: NOWAIT runs the close callbacks without blocking
+      ;; on a handle that is still active (ONCE would wait for it).
       (dotimes (i 64)
-        (uv-run ptr +uv-run-once+)
-        (let ((err (uv-loop-close ptr)))
-          (when (zerop err)
-            (foreign-free ptr)
-            (setf (libuv-loop-closed-p loop) t
-                  (slot-value loop 'ptr) (null-pointer)
-                  (slot-value loop 'async) (null-pointer))
-            (return-from close-loop loop))))
+        (uv-run ptr +uv-run-nowait+)
+        (when (zerop (uv-loop-close ptr))
+          (foreign-free ptr)
+          (setf (libuv-loop-closed-p loop) t
+                (slot-value loop 'ptr) (null-pointer)
+                (slot-value loop 'async) (null-pointer))
+          (return-from close-loop loop)))
       (%check (uv-loop-close ptr) "uv_loop_close")))
   loop)
+
+(defmethod close-event-loop ((backend libuv-backend) (loop libuv-loop))
+  (close-loop loop))
+
 
