@@ -6,12 +6,12 @@
     nil)
 
 (defsystem "event-backend-libuv"
-  :version "0.2.1"
+  :version "0.2.2"
   :description "libuv backend for event-protocol (default; Windows/linux/darwin)"
   :author "egao1980"
   :license "MIT"
   :defsystem-depends-on ("cffi-grovel" "asdf-native")
-  :depends-on ("cffi" "event-protocol" "cl-stack-executors")
+  :depends-on ("cffi" (:version "event-protocol" "0.2.2") "cl-stack-executors")
   :serial t
   :pathname "src"
   ;; Prefer overlay grovel-cache/ (no CC). Local-dev falls back to grovel-file.
