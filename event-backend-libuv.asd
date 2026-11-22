@@ -6,7 +6,7 @@
     nil)
 
 (defsystem "event-backend-libuv"
-  :version "0.2.2"
+  :version "0.2.3"
   :description "libuv backend for event-protocol (default; Windows/linux/darwin)"
   :author "egao1980"
   :license "MIT"

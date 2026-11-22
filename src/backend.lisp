@@ -160,6 +160,9 @@
               (warn "wake callback error: ~A" e))))))))
 
 (defcallback %uv-poll-cb :void ((handle :pointer) (status :int) (events :int))
+  ;; event-protocol IO callback contract: (STATUS &optional CODE). Success is
+  ;; (:OK); a failed poll (STATUS < 0, a UV_E* code; on Unix POLLERR arrives
+  ;; as UV_EBADF and libuv has already stopped the poll) is (:ERROR STATUS).
   (declare (ignore events))
   (let ((entry (%lookup handle)))
     (when entry
@@ -171,7 +174,10 @@
               (if (minusp status)
                   (funcall fn :error status)
                   (funcall fn :ok))
-            (error (e) (warn "poll callback error: ~A" e))))))))
+            (error (e)
+              ;; The loop keeps running, so the callback's owner learns
+              ;; nothing: name the status so a lost poll error is findable.
+              (warn "poll callback error (uv status ~D): ~A" status e))))))))
 
 (defmethod make-event-loop ((backend libuv-backend) &key)
   (let* ((loop-ptr (foreign-alloc :uint8 :count (uv-loop-size)))
