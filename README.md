@@ -20,6 +20,22 @@ ros -e '(asdf:load-asd "event-backend-libuv.asd")' \
 
 Conformance suite is shared (`event-protocol/conformance`); this repo sets the backend maker.
 
+## IO callbacks
+
+`register-io` / `update-io` callbacks are called as `(status &optional code)`, the
+`event-protocol` contract:
+
+- `(funcall callback :ok)`: the fd is ready (`uv_poll_cb` status 0).
+- `(funcall callback :error code)`: the poll failed. `code` is libuv's negative
+  `UV_E*` status. On Unix libuv reports `POLLERR` (a peer reset, for example) as
+  `UV_EBADF` and has already stopped the poll: treat it as a connection failure,
+  cancel the handle and close the fd.
+
+An error signalled from a callback is caught and turned into a warning so the loop
+keeps running. A callback that takes only one argument therefore loses the poll
+error, and its owner never completes
+([http-backend-async#62](https://github.com/egao1980/http-backend-async/issues/62)).
+
 `submit` with no `:executor` uses a per-loop [`cl-stack-executors`](https://github.com/egao1980/cl-stack-executors) thread pool (not `uv_queue_work`). Pass a function of one thunk to override.
 
 ## Overlay
