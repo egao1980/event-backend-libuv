@@ -36,7 +36,7 @@ keeps running. A callback that takes only one argument therefore loses the poll
 error, and its owner never completes
 ([http-backend-async#62](https://github.com/egao1980/http-backend-async/issues/62)).
 
-`submit` with no `:executor` uses a per-loop [`cl-stack-executors`](https://github.com/egao1980/cl-stack-executors) thread pool (not `uv_queue_work`). Pass a function of one thunk to override.
+`submit` with no `:executor` uses a per-loop [`cl-stack-executors`](https://github.com/egao1980/cl-stack-executors) thread pool (not `uv_queue_work`). Pass a function of one thunk to override. `close-event-loop` does not wait for a thunk that is still running (0.2.4): the pool stops, the thunk finishes on its own, and its callback is dropped because the loop is closed. Queued thunks that had not started never run.
 
 ## Overlay
 

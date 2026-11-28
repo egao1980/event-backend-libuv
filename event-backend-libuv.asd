@@ -6,7 +6,7 @@
     nil)
 
 (defsystem "event-backend-libuv"
-  :version "0.2.3"
+  :version "0.2.4"
   :description "libuv backend for event-protocol (default; Windows/linux/darwin)"
   :author "egao1980"
   :license "MIT"
@@ -59,7 +59,11 @@
   :pathname "tests"
   :serial t
   :components ((:file "package")
-               (:file "conformance"))
+               (:file "conformance")
+               ;; 0.2.4: closing with a busy SUBMIT
+               (:file "close-test"))
   :perform (test-op (o c)
-             (unless (symbol-call :event-backend-libuv/tests :run-conformance)
-               (error "event-protocol/conformance failed against libuv"))))
+                    (unless (symbol-call :event-backend-libuv/tests :run-conformance)
+                      (error "event-protocol/conformance failed against libuv"))
+                    (unless (symbol-call :event-backend-libuv/tests :run-local)
+                      (error "event-backend-libuv/tests failed"))))
