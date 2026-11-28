@@ -97,9 +97,13 @@
                            (backend-name (event-loop-backend loop)))))))
 
 (defun %shutdown-submit-pool (loop)
+  "Stop LOOP's submit pool without joining it (0.2.4): idle workers exit, a
+worker still running a thunk exits when it returns, and that thunk's result
+is dropped (SUBMIT: the loop is closed). Queued thunks that did not start
+never run."
   (let ((pool (libuv-loop-submit-pool loop)))
     (when pool
-      (executor-shutdown pool :wait t)
+      (executor-shutdown pool :wait nil)
       (setf (libuv-loop-submit-pool loop) nil))))
 
 (defcallback %uv-close-cb :void ((handle :pointer))
